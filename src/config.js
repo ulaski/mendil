@@ -1,0 +1,67 @@
+import os from 'node:os';
+import path from 'node:path';
+
+const env = process.env;
+
+function int(value, fallback, { min = -Infinity, max = Infinity } = {}) {
+  const n = Number.parseInt(value ?? '', 10);
+  if (Number.isNaN(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
+function bool(value, fallback) {
+  if (value === undefined || value === '') return fallback;
+  return ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase());
+}
+
+function list(value) {
+  return (value ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** Accepts "host", "host:port" or "[ipv6]:port". */
+function parseHost(raw, defaultPort) {
+  const value = (raw ?? '').trim();
+  const v6 = value.match(/^\[(.+)\](?::(\d+))?$/);
+  if (v6) return { host: v6[1], port: int(v6[2], defaultPort) };
+  const parts = value.split(':');
+  if (parts.length === 2) return { host: parts[0], port: int(parts[1], defaultPort) };
+  return { host: value, port: defaultPort };
+}
+
+export function loadConfig() {
+  const { host, port } = parseHost(env.TS3_HOST, int(env.TS3_PORT, 9987));
+  if (!host) {
+    throw new Error('TS3_HOST is not set. Copy .env.example to .env and fill in your server address.');
+  }
+
+  return {
+    ts3: {
+      host,
+      port,
+      serverPassword: env.TS3_SERVER_PASSWORD || '',
+      nickname: env.BOT_NICKNAME || 'MusicBot',
+      channel: env.TS3_CHANNEL || '',
+      channelPassword: env.TS3_CHANNEL_PASSWORD || '',
+      clientDir: env.TS3_CLIENT_DIR || '/opt/ts3client',
+      configDir: env.TS3_CONFIG_DIR || path.join(os.homedir(), '.ts3client'),
+      queryPort: int(env.TS3_CLIENTQUERY_PORT, 25639),
+    },
+    bot: {
+      prefix: env.COMMAND_PREFIX || '!',
+      allowedUids: list(env.ALLOWED_UIDS),
+      announceTracks: bool(env.ANNOUNCE_TRACKS, true),
+    },
+    player: {
+      sink: env.PULSE_SINK || 'tsbot',
+      defaultVolume: int(env.DEFAULT_VOLUME, 70, { min: 0, max: 100 }),
+      normalize: bool(env.NORMALIZE_AUDIO, true),
+      maxQueue: int(env.MAX_QUEUE, 100, { min: 1 }),
+      maxPlaylistItems: int(env.MAX_PLAYLIST_ITEMS, 50, { min: 1 }),
+      maxTrackDuration: int(env.MAX_TRACK_DURATION, 0, { min: 0 }),
+      cookiesFile: env.YTDLP_COOKIES_FILE || '',
+    },
+  };
+}
