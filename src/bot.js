@@ -1,3 +1,5 @@
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 import { ClientQuery } from './ts3/clientquery.js';
 import { Ts3ClientProcess } from './ts3/client-process.js';
 import { Player } from './player.js';
@@ -23,6 +25,7 @@ export class Bot {
   #reconnectDelay = RECONNECT_MIN_MS;
   #queryConnectTried = false;
   #transmitting = null;
+  #resolvedHost = null;
 
   constructor(config, log) {
     this.config = config;
@@ -49,7 +52,7 @@ export class Bot {
   async start() {
     await this.client.prepare();
     await this.player.init();
-    this.#startClient();
+    await this.#startClient();
     this.#watchdogTimer = setInterval(() => this.#watchdog(), WATCHDOG_INTERVAL_MS);
     await this.#watchdog();
   }
@@ -130,8 +133,28 @@ export class Bot {
   }
 
   #addressParts() {
-    const { host, port, serverPassword, nickname, channel, channelPassword } = this.config.ts3;
+    const { port, serverPassword, nickname, channel, channelPassword } = this.config.ts3;
+    const host = this.#resolvedHost || this.config.ts3.host;
     return { host: host.includes(':') ? `[${host}]` : host, port, serverPassword, nickname, channel, channelPassword };
+  }
+
+  /**
+   * The TS3 client first looks up dot-less host names as TeamSpeak "server nicknames"
+   * (e.g. "teamspeak" -> voice.teamspeak.com), so a Docker service name can end up pointing
+   * at somebody else's server. Resolve such single-label names to an IP ourselves.
+   * Re-resolved on every (re)connect because container IPs change.
+   */
+  async #resolveHost() {
+    const { host } = this.config.ts3;
+    this.#resolvedHost = null;
+    if (host.includes('.') || isIP(host)) return;
+    try {
+      const { address } = await lookup(host);
+      this.#resolvedHost = address;
+      this.log.debug(`resolved "${host}" to ${address}`);
+    } catch (err) {
+      this.log.warn(`could not resolve "${host}": ${err.message}`);
+    }
   }
 
   #connectUrl() {
@@ -143,7 +166,8 @@ export class Bot {
     return `ts3server://${host}?${params.toString().replace(/\+/g, '%20')}`;
   }
 
-  #startClient() {
+  async #startClient() {
+    await this.#resolveHost();
     const { host, port, nickname, channel } = this.#addressParts();
     this.log.info(`connecting to ${host}:${port} as "${nickname}"${channel ? ` (channel "${channel}")` : ''}`);
     this.#lastConnectAttempt = Date.now();
@@ -151,6 +175,7 @@ export class Bot {
   }
 
   async #connectViaQuery() {
+    await this.#resolveHost();
     const { host, port, serverPassword, nickname, channel, channelPassword } = this.#addressParts();
     this.#lastConnectAttempt = Date.now();
     this.log.info(`reconnecting to ${host}:${port}`);
@@ -187,7 +212,7 @@ export class Bot {
       await this.client.stop();
       await new Promise((r) => setTimeout(r, 3_000));
       await this.client.prepare();
-      this.#startClient();
+      await this.#startClient();
     } catch (err) {
       this.log.error('client restart failed:', err);
     } finally {
