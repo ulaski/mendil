@@ -1,0 +1,15 @@
+{
+  "name": "ts3-music-bot",
+  "version": "1.0.0",
+  "description": "TeamSpeak 3 music bot: headless TS3 client + yt-dlp/ffmpeg, controlled via chat commands",
+  "type": "module",
+  "private": true,
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/*.test.js"
+  }
+}
