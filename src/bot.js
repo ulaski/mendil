@@ -1,13 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { ClientQuery } from './ts3/clientquery.js';
-import { Ts3ClientProcess } from './ts3/client-process.js';
 import { Player } from './player.js';
 import { Prefetcher } from './prefetch.js';
-import { ReconnectPolicy } from './reconnect.js';
 import { StateStore } from './state.js';
 import { StatsReporter } from './stats.js';
 import { RateLimiter } from './ratelimit.js';
@@ -16,103 +11,63 @@ import { createCommands } from './commands.js';
 import { createI18n } from './i18n/index.js';
 import { chunkMessage, formatDuration, safe, stripBBCode, trackLink } from './format.js';
 import { isYoutubeBlock, YOUTUBE_DOCS_URL } from './ytdlp.js';
+import { createBackend } from './voice/index.js';
+
+export { isProcessAlive } from './voice/classic.js';
 
 // Commands that start a yt-dlp lookup; each user gets a few at once, then one every few seconds.
 const RATE_LIMITED = new Set(['play', 'playnext', 'search']);
 
 const WATCHDOG_INTERVAL_MS = 10_000;
-const QUERY_STARTUP_GRACE_MS = 90_000; // restart the client if ClientQuery never comes up
-const ERR_NOT_CONNECTED = 1794;
 const STATE_SAVE_INTERVAL_MS = 5_000;
 const STATS_INTERVAL_MS = 10 * 60_000;
 const GIVE_UP_DISCONNECTED_MS = 20 * 60_000; // then exit for a clean container restart
 
-// TS client restarts after a crash: 3 s, 6 s, 12 s … up to 2 min. If it keeps crashing,
-// exit so Docker restarts the whole container (Xvfb and PulseAudio included).
-const CLIENT_RESTART_MIN_MS = 3_000;
-const CLIENT_RESTART_MAX_MS = 2 * 60_000;
-const CLIENT_STABLE_MS = 10 * 60_000; // uptime after which the restart backoff resets
-const CLIENT_CRASH_WINDOW_MS = 5 * 60_000;
-const CLIENT_MAX_CRASHES = 5;
-
 // Minimum gap between outgoing chat messages, to stay clear of the server's anti-flood.
 const MESSAGE_GAP_MS = 300;
 
-// TeamSpeak codec ids (channel_codec) and the error id for "client is flooding".
+// TeamSpeak codec ids (channel_codec).
 const CODECS = { 0: 'Speex Narrowband', 1: 'Speex Wideband', 2: 'Speex Ultra-Wideband', 3: 'CELT Mono', 4: 'Opus Voice', 5: 'Opus Music' };
-const CODEC_OPUS_MUSIC = '5';
+const CODEC_OPUS_MUSIC = 5;
 const MIN_MUSIC_QUALITY = 7;
-const ERR_FLOODING = 524;
-const GROUP_CACHE_MS = 60_000;
-
-// notifyclientleftview reasons for our own client
-const REASON_KICKED = '5';
-const REASON_BANNED = '6';
-
-/** True while a process exists and isn't a zombie (Xvfb is our child but never reaped). */
-export function isProcessAlive(pid) {
-  try {
-    const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
-    const state = stat.slice(stat.lastIndexOf(')') + 2, stat.lastIndexOf(')') + 3);
-    return state !== 'Z' && state !== 'X';
-  } catch {
-    return false;
-  }
-}
 
 // Touched every watchdog tick while everything is fine; the Docker HEALTHCHECK checks its age.
 export const HEALTH_FILE = '/tmp/mendil.healthy';
 // Human-readable details for `docker exec mendil cat /tmp/mendil-health.json`.
 export const HEALTH_DETAILS_FILE = '/tmp/mendil-health.json';
 
-const TARGET_PRIVATE = '1';
-const TARGET_CHANNEL = '2';
-
+/**
+ * Everything that doesn't depend on how Mendil talks to TeamSpeak: chat commands, access
+ * control, the player and its state, health and stats. The voice engine (src/voice/) owns
+ * the connection.
+ */
 export class Bot {
-  #cq = null;
   #watchdogTimer = null;
-  #reconnectTimer = null;
   #timers = [];
   #stopping = false;
-  #restarting = false;
-  #status = 'disconnected'; // TeamSpeak connect status of server connection handler 1
-  #setupDone = false; // post-connect setup (whoami, transmit state) succeeded
-  #setupRunning = null;
-  #wantTransmit = false;
-  #transmitting = null; // last state confirmed by the client
-  #transmitChain = Promise.resolve();
+  #watchdogBusy = false;
   #pausedByDisconnect = false;
   #restored = null; // { tracks, paused } until the restored queue has been started
-  #leaving = null; // kick/ban info from notifyclientleftview, applied on the disconnect
-  #ownClid = null; // kept after a disconnect, to recognise our own leave notification
-  #resolvedHost = null;
-  #watchdogBusy = false;
-  #clientRestartDelay = CLIENT_RESTART_MIN_MS;
-  #clientCrashes = [];
   #sendQueue = Promise.resolve();
   #resolveTimes = [];
-  #policy = new ReconnectPolicy();
-  #refusalLogged = false; // explain a refused connection once per failure streak
   #hinted = new Set(); // channel hints already posted ("<cid>:<issue>")
   #diagnosing = new Map(); // cid -> running check (a move triggers it twice)
   #floodWarned = false;
-  #groupCache = new Map(); // clid -> { uid, groups, at }
   #limiter = new RateLimiter(); // per user, for commands that start yt-dlp
   #stats = new StatsReporter();
 
-  constructor(config, log) {
+  constructor(config, log, { backend } = {}) {
     this.config = config;
     this.log = log;
-    this.me = { clid: null, cid: null };
     this.i18n = createI18n(config.bot.language, { prefix: config.bot.prefix });
     const { t } = this.i18n;
 
-    this.client = new Ts3ClientProcess({ ...config.ts3, log: log.child('ts3client') });
+    this.voice = backend ?? createBackend(config, log);
     const p = config.player;
     const prefetcher = p.prefetch
       ? new Prefetcher({ dir: p.prefetchDir, cookiesFile: p.cookiesFile, cacheDir: p.cacheDir, proxy: p.proxy, maxDuration: p.prefetchMaxDuration, normalize: p.normalize, log: log.child('prefetch') })
       : null;
-    this.player = new Player({ ...p, prefetcher, log: log.child('player') });
+    this.player = new Player({ ...p, output: this.voice.audio, prefetcher, log: log.child('player') });
     this.state = new StateStore(path.join(config.dataDir, 'state.json'), log.child('state'));
     this.updater = new YtdlpUpdater({
       enabled: config.ytdlp.autoUpdate,
@@ -123,7 +78,6 @@ export class Bot {
     });
     this.commands = createCommands(this);
 
-    this.client.on('exit', () => this.#restartClient('process exited', { crash: true }));
     this.player.on('trackStart', (track) => {
       this.setTransmitting(true);
       if (config.bot.announceTracks) {
@@ -140,10 +94,20 @@ export class Bot {
       this.sendChannel(blocked ? t('youtubeBlocked', { url: YOUTUBE_DOCS_URL }) : t('playbackHalted', { reason: safe(message) }));
     });
     this.player.on('idle', () => this.setTransmitting(false));
+
+    this.voice.on('connected', ({ cid }) => this.#onConnected(cid));
+    this.voice.on('disconnected', () => this.#onDisconnected());
+    this.voice.on('moved', (cid) => this.#diagnoseChannel(cid));
+    this.voice.on('text', (msg) => this.#onTextMessage(msg).catch((err) => this.log.error('command failed:', err)));
+    this.voice.on('fatal', (reason) => this.#fatal(reason));
+  }
+
+  /** Our own client id and channel, as the voice engine knows them. */
+  get me() {
+    return this.voice.me;
   }
 
   async start() {
-    await this.client.prepare();
     const saved = this.state.load();
     if (Array.isArray(saved?.hinted)) this.#hinted = new Set(saved.hinted); // don't repeat hints after a restart
     if (saved) {
@@ -159,7 +123,7 @@ export class Bot {
     this.#timers.push(setInterval(() => this.#saveState(), STATE_SAVE_INTERVAL_MS));
     this.#timers.push(setInterval(() => this.#logStats(), STATS_INTERVAL_MS));
     this.#stats.sample(Date.now()); // baseline for the first CPU numbers
-    await this.#startClient();
+    await this.voice.start();
     await this.#watchdog();
     this.#scheduleWatchdog();
   }
@@ -168,19 +132,12 @@ export class Bot {
     if (this.#stopping) return;
     this.#stopping = true;
     clearTimeout(this.#watchdogTimer);
-    clearTimeout(this.#reconnectTimer);
     for (const timer of this.#timers) clearInterval(timer);
     this.updater.stop();
     this.#saveState(); // before stopping playback, so the queue survives
     this.player.dispose();
-    try {
-      if (this.#cq?.connected) await this.#cq.send('disconnect', { msg: this.i18n.t('shuttingDown') });
-    } catch {
-      // ignore
-    }
-    this.#cq?.close();
     this.#markHealthy(false);
-    await this.client.stop();
+    await this.voice.stop(this.i18n.t('shuttingDown'));
   }
 
   recordResolve(ms) {
@@ -214,31 +171,12 @@ export class Bot {
   }
 
   async #watchdog() {
-    if (this.#stopping) return;
-    // Checked even while a client restart is pending, so a dead Xvfb/PulseAudio is noticed
-    // within one tick instead of after a series of doomed restarts.
-    if (!this.#checkSupportProcesses()) return;
-    if (this.#restarting || this.#watchdogBusy) return;
+    if (this.#stopping || this.#watchdogBusy) return;
     this.#watchdogBusy = true;
     try {
-      if (!this.client.running) return void (await this.#restartClient('process not running', { crash: true }));
-
-      if (!this.#cq?.connected) {
-        try {
-          await this.#connectQuery();
-        } catch (err) {
-          const age = Date.now() - this.client.startedAt;
-          this.log.debug(`ClientQuery not reachable yet: ${err.message}`);
-          if (age > QUERY_STARTUP_GRACE_MS) await this.#restartClient('ClientQuery unreachable', { crash: true });
-          return;
-        }
-      }
-
-      await this.#checkServerConnection();
-      if (this.#setupDone) this.#syncTransmit(); // re-send if a previous update got lost
-
-      const since = this.#policy.disconnectedSince;
-      if (since && Date.now() - since > GIVE_UP_DISCONNECTED_MS && !this.#policy.isBanned(Date.now())) {
+      await this.voice.tick();
+      const since = this.voice.disconnectedSince;
+      if (since && Date.now() - since > GIVE_UP_DISCONNECTED_MS && !this.voice.banned) {
         this.#fatal('not connected to the server for 20 minutes');
       }
     } catch (err) {
@@ -247,20 +185,6 @@ export class Bot {
       this.#watchdogBusy = false;
       this.#writeHealth();
     }
-  }
-
-  /**
-   * Xvfb and PulseAudio are started by the entrypoint and nobody else watches them. Without
-   * them nothing works, so exit and let Docker's restart policy rebuild the whole container.
-   */
-  #checkSupportProcesses() {
-    for (const [name, pid] of [['Xvfb', process.env.XVFB_PID], ['PulseAudio', process.env.PULSE_PID]]) {
-      if (pid && !isProcessAlive(Number(pid))) {
-        this.#fatal(`${name} (pid ${pid}) is not running`);
-        return false;
-      }
-    }
-    return true;
   }
 
   #fatal(reason) {
@@ -272,238 +196,34 @@ export class Bot {
   }
 
   // ---------------------------------------------------------------------------
-  // TeamSpeak connection management
+  // Connection events from the voice engine
   // ---------------------------------------------------------------------------
 
-  async #connectQuery() {
-    const cq = new ClientQuery({ port: this.config.ts3.queryPort, log: this.log.child('clientquery') });
-    // Ignore events from any connection other than the current one, so a leaked or
-    // replaced connection can never run a chat command a second time.
-    cq.on('notify', (name, params) => {
-      if (this.#cq === cq) this.#onNotify(name, params);
-    });
-    cq.on('close', () => {
-      if (this.#cq === cq && !this.#stopping) this.log.warn('ClientQuery connection lost');
-    });
-    try {
-      await cq.connect(this.client.readApiKey());
-      for (const event of ['notifytextmessage', 'notifyconnectstatuschange', 'notifyclientmoved', 'notifyclientleftview']) {
-        await cq.send('clientnotifyregister', { schandlerid: 0, event });
-      }
-    } catch (err) {
-      cq.close();
-      throw err;
+  async #onConnected(cid) {
+    this.#diagnoseChannel(cid);
+    if (this.#pausedByDisconnect) {
+      this.#pausedByDisconnect = false;
+      if (this.player.resume()) this.log.info('resumed playback after reconnecting');
     }
-    this.#cq?.close();
-    this.#cq = cq;
-    this.#status = 'unknown';
-    this.#setupDone = false;
-    this.log.info('ClientQuery connected');
-  }
-
-  async #checkServerConnection() {
-    try {
-      const [me] = await this.#cq.send('whoami');
-      this.me = { clid: me.clid, cid: me.cid };
-      this.#ownClid = me.clid;
-      if (!this.#policy.connected) this.#policy.onStatus('connection_established', Date.now());
-      if (!this.#setupDone) await this.#onConnected();
-    } catch (err) {
-      if (err.id !== ERR_NOT_CONNECTED) throw err;
-      if (this.#policy.connected) this.#policy.onDisconnected(Date.now()); // missed the notification
-      await this.#driveReconnect();
+    if (this.#restored) {
+      const { paused } = this.#restored;
+      this.#restored = null;
+      if (!paused) this.player.start();
     }
+    // Only transmit while music is actually playing.
+    await this.setTransmitting(this.player.isPlaying && !this.player.paused);
+    this.#writeHealth();
   }
 
-  /** Asks the reconnect policy what to do and does it; reschedules itself while waiting. */
-  async #driveReconnect() {
-    clearTimeout(this.#reconnectTimer);
-    if (this.#stopping || this.#restarting || !this.#cq?.connected) return;
-    const now = Date.now();
-    const step = this.#policy.next(now);
-    if (step.action === 'connect') {
-      await this.#connectViaQuery().catch((err) => this.log.warn(`connect failed: ${err.message}`));
-    } else if (step.action === 'restart') {
-      await this.#restartClient(step.reason);
-      return;
-    }
-    const due = this.#policy.dueIn(Date.now());
-    if (due !== null) {
-      this.#reconnectTimer = setTimeout(() => this.#driveReconnect(), Math.max(500, due));
-      this.#reconnectTimer.unref?.();
-    }
-  }
-
-  #addressParts() {
-    const { port, serverPassword, nickname, channel, channelPassword } = this.config.ts3;
-    const host = this.#resolvedHost || this.config.ts3.host;
-    return { host: host.includes(':') ? `[${host}]` : host, port, serverPassword, nickname, channel, channelPassword };
-  }
-
-  /**
-   * The TS3 client first looks up dot-less host names as TeamSpeak "server nicknames"
-   * (e.g. "teamspeak" -> voice.teamspeak.com), so a Docker service name can end up pointing
-   * at somebody else's server. Resolve such single-label names to an IP ourselves.
-   * Re-resolved on every (re)connect because container IPs change.
-   */
-  async #resolveHost() {
-    const { host } = this.config.ts3;
-    this.#resolvedHost = null;
-    if (host.includes('.') || isIP(host)) return;
-    try {
-      const { address } = await lookup(host);
-      this.#resolvedHost = address;
-      this.log.debug(`resolved "${host}" to ${address}`);
-    } catch (err) {
-      this.log.warn(`could not resolve "${host}": ${err.message}`);
-    }
-  }
-
-  #connectUrl() {
-    const { host, port, serverPassword, nickname, channel, channelPassword } = this.#addressParts();
-    const params = new URLSearchParams({ port: String(port), nickname });
-    if (serverPassword) params.set('password', serverPassword);
-    if (channel) params.set('channel', channel);
-    if (channelPassword) params.set('channelpassword', channelPassword);
-    return `ts3server://${host}?${params.toString().replace(/\+/g, '%20')}`;
-  }
-
-  async #startClient() {
-    await this.#resolveHost();
-    const { host, port, nickname, channel } = this.#addressParts();
-    this.log.info(`connecting to ${host}:${port} as "${nickname}"${channel ? ` (channel "${channel}")` : ''}`);
-    this.#policy.onClientStarted(Date.now());
-    this.client.start([this.#connectUrl()]);
-  }
-
-  async #connectViaQuery() {
-    await this.#resolveHost();
-    const { host, port, serverPassword, nickname, channel, channelPassword } = this.#addressParts();
-    this.log.info(`reconnecting to ${host}:${port} (attempt ${this.#policy.attempts})`);
-    await this.#cq.send('connect', {
-      address: `${host}:${port}`,
-      password: serverPassword,
-      nickname,
-      channel,
-      channel_pw: channelPassword,
-    });
-  }
-
-  /** Post-connect setup. Retried on the next watchdog tick if any step fails. */
-  #onConnected() {
-    this.#setupRunning ??= (async () => {
-      try {
-        const [me] = await this.#cq.send('whoami');
-        this.me = { clid: me.clid, cid: me.cid };
-        this.#ownClid = me.clid;
-        this.#status = 'connection_established';
-        this.#transmitting = null; // unknown after a (re)connect
-        this.#setupDone = true;
-        this.#refusalLogged = false;
-        this.log.info(`connected to server (clid=${me.clid}, cid=${me.cid})`);
-        this.#diagnoseChannel(me.cid);
-
-        if (this.#pausedByDisconnect) {
-          this.#pausedByDisconnect = false;
-          if (this.player.resume()) this.log.info('resumed playback after reconnecting');
-        }
-        if (this.#restored) {
-          const { paused } = this.#restored;
-          this.#restored = null;
-          if (!paused) this.player.start();
-        }
-        // Only transmit while music is actually playing. (Don't mute the client's output to
-        // save work: TeamSpeak then stops transmitting too. What it hears goes to "devnull".)
-        await this.setTransmitting(this.player.isPlaying && !this.player.paused);
-        this.#writeHealth();
-      } catch (err) {
-        this.#setupDone = false;
-        this.log.warn(`post-connect setup failed (will retry): ${err.message}`);
-      } finally {
-        this.#setupRunning = null;
-      }
-    })();
-    return this.#setupRunning;
-  }
-
-  #onDisconnected(params) {
-    const prev = this.#status;
-    this.me = { clid: null, cid: null };
-    this.#transmitting = null;
-    this.#setupDone = false;
+  #onDisconnected() {
     this.#writeHealth();
     // Nobody can hear us: pause instead of playing (and using up) the queue into the void.
     if (this.player.isPlaying && !this.player.paused && this.player.pause()) this.#pausedByDisconnect = true;
-
-    const leaving = this.#leaving && Date.now() - this.#leaving.at < 10_000 ? this.#leaving : null;
-    this.#leaving = null;
-    this.#policy.onDisconnected(Date.now(), leaving ?? {});
-    const error = params.error && params.error !== '0' ? ` (error ${params.error})` : '';
-    this.log.warn(`disconnected from server${error}`);
-    if (!leaving && prev !== 'connection_established' && !this.#refusalLogged) {
-      // The TS3 client reports every refusal the same way (error 0, no reason anywhere).
-      this.#refusalLogged = true;
-      this.log.warn('the server refused the connection (TeamSpeak does not say why). Common causes: ' +
-        'a wrong or missing TS3_SERVER_PASSWORD; the bot\'s identity, IP or nickname is banned; the server is full; ' +
-        'or the server requires an identity security level above 8. Mendil keeps retrying.');
-    }
-    this.#driveReconnect();
   }
 
-  /** Our own client left the server view: kicked or banned (reasonid 5/6). */
-  #onOwnLeave(params) {
-    const by = params.invokername ? ` by ${params.invokername}` : '';
-    const why = params.reasonmsg ? `: ${params.reasonmsg}` : '';
-    if (params.reasonid === REASON_BANNED) {
-      const seconds = Number(params.bantime ?? 0);
-      this.#leaving = { at: Date.now(), banSeconds: seconds };
-      this.log.error(`BANNED from the server${by}${why} (${seconds > 0 ? `${seconds}s` : 'permanent'}); waiting before reconnecting`);
-    } else if (params.reasonid === REASON_KICKED) {
-      this.#leaving = { at: Date.now(), kicked: true };
-      this.log.warn(`kicked from the server${by}${why}; reconnecting in a bit`);
-    } else {
-      return;
-    }
-    // In case the disconnect notification came first, apply the kick/ban now.
-    if (!this.#policy.connected) this.#policy.onDisconnected(Date.now(), this.#leaving);
-  }
-
-  /** @param {{crash?: boolean}} opts crash=true when the client itself failed (not the server) */
-  async #restartClient(reason, { crash = false } = {}) {
-    if (this.#stopping || this.#restarting) return;
-    this.#restarting = true;
-    try {
-      let delay = CLIENT_RESTART_MIN_MS;
-      if (crash) {
-        const now = Date.now();
-        if (now - this.client.startedAt > CLIENT_STABLE_MS) this.#clientRestartDelay = CLIENT_RESTART_MIN_MS;
-        this.#clientCrashes = this.#clientCrashes.filter((t) => now - t < CLIENT_CRASH_WINDOW_MS);
-        this.#clientCrashes.push(now);
-        if (this.#clientCrashes.length > CLIENT_MAX_CRASHES) {
-          this.#fatal(`TeamSpeak client failed ${this.#clientCrashes.length} times in 5 minutes`);
-          return;
-        }
-        delay = this.#clientRestartDelay;
-        this.#clientRestartDelay = Math.min(this.#clientRestartDelay * 2, CLIENT_RESTART_MAX_MS);
-      }
-      this.log.warn(`restarting TeamSpeak client in ${Math.round(delay / 1000)}s: ${reason}`);
-      clearTimeout(this.#reconnectTimer);
-      this.#cq?.close();
-      this.#cq = null;
-      this.#status = 'disconnected';
-      this.#setupDone = false;
-      this.#writeHealth();
-      await this.client.stop();
-      await sleep(delay);
-      if (this.#stopping || !this.#checkSupportProcesses()) return;
-      await this.client.prepare();
-      await this.#startClient();
-    } catch (err) {
-      this.log.error('client restart failed:', err);
-    } finally {
-      this.#restarting = false;
-    }
-  }
+  // ---------------------------------------------------------------------------
+  // Health
+  // ---------------------------------------------------------------------------
 
   #markHealthy(healthy) {
     try {
@@ -515,15 +235,16 @@ export class Bot {
   }
 
   #writeHealth() {
-    const connected = this.#setupDone && this.#policy.connected;
+    const { connected, me, disconnectedSince } = this.voice;
     this.#markHealthy(connected && !this.#stopping);
     const details = {
       at: new Date().toISOString(),
+      engine: this.config.voice.backend,
       connected,
-      clid: this.me.clid,
-      channel: this.me.cid,
-      disconnectedSince: this.#policy.disconnectedSince ? new Date(this.#policy.disconnectedSince).toISOString() : null,
-      banned: this.#policy.isBanned(Date.now()),
+      clid: me.clid,
+      channel: me.cid,
+      disconnectedSince: disconnectedSince ? new Date(disconnectedSince).toISOString() : null,
+      banned: this.voice.banned,
       playing: this.player.current?.title ?? null,
       paused: this.player.paused,
       halted: this.player.halted,
@@ -536,50 +257,22 @@ export class Bot {
     }
   }
 
-  /** Requests the transmit state; updates are serialised and re-sent until confirmed. */
-  setTransmitting(on) {
-    this.#wantTransmit = on;
-    return this.#syncTransmit();
-  }
+  // ---------------------------------------------------------------------------
+  // What commands ask of the bot
+  // ---------------------------------------------------------------------------
 
-  #syncTransmit() {
-    this.#transmitChain = this.#transmitChain.then(async () => {
-      const want = this.#wantTransmit;
-      if (this.#transmitting === want || !this.#cq?.connected || !this.#setupDone) return;
-      try {
-        // "deactivated" (unlike "muted") stops transmission without showing a muted mic icon.
-        await this.#cq.send('clientupdate', { client_input_deactivated: want ? 0 : 1 });
-        this.#transmitting = want;
-      } catch (err) {
-        this.log.warn('could not change transmission state:', err.message);
-      }
-    });
-    return this.#transmitChain;
+  setTransmitting(on) {
+    return this.voice.setTransmitting(on);
   }
 
   async moveToClientChannel(clid) {
-    const clients = await this.#cq.send('clientlist');
-    const target = clients.find((c) => c.clid === String(clid));
-    if (!target) throw new Error(this.i18n.t('clientNotFound'));
-    if (target.cid === this.me.cid) return;
-    // me.cid is updated by the move notification (which also runs the channel check), so a
-    // refused move doesn't leave it pointing at the wrong channel.
-    await this.#cq.send('clientmove', { cid: target.cid, clid: this.me.clid });
+    const result = await this.voice.moveToClientChannel(clid);
+    if (result?.notFound) throw new Error(this.i18n.t('clientNotFound'));
   }
 
-  /** Unique id and server group ids of a client (cached briefly). */
-  async clientInfo(clid) {
-    const cached = this.#groupCache.get(clid);
-    if (cached && Date.now() - cached.at < GROUP_CACHE_MS) return cached;
-    const [c] = await this.#cq.send('clientvariable', { clid }, [], ['client_unique_identifier', 'client_servergroups', 'client_nickname']);
-    const info = {
-      uid: c.client_unique_identifier,
-      name: c.client_nickname,
-      groups: (c.client_servergroups ?? '').split(',').filter(Boolean),
-      at: Date.now(),
-    };
-    this.#groupCache.set(clid, info);
-    return info;
+  /** Unique id, nickname and server group ids of a client (cached briefly by the engine). */
+  clientInfo(clid) {
+    return this.voice.clientInfo(clid);
   }
 
   /**
@@ -587,7 +280,7 @@ export class Bot {
    * (once per channel and issue), so admins don't have to guess.
    */
   #diagnoseChannel(cid) {
-    if (!cid || !this.#cq?.connected) return Promise.resolve();
+    if (!cid || !this.voice.connected) return Promise.resolve();
     if (!this.#diagnosing.has(cid)) {
       this.#diagnosing.set(cid, this.#checkChannel(cid).finally(() => this.#diagnosing.delete(cid)));
     }
@@ -597,18 +290,19 @@ export class Bot {
   async #checkChannel(cid) {
     const { t } = this.i18n;
     try {
-      const [ch] = await this.#cq.send('channelvariable', { cid }, [], ['channel_codec', 'channel_codec_quality', 'channel_needed_talk_power']);
-      const [me] = await this.#cq.send('clientvariable', { clid: this.me.clid }, [], ['client_talk_power', 'client_is_talker']);
+      const ch = await this.voice.channelSettings(cid);
       const issues = [];
-      const quality = Number(ch.channel_codec_quality);
-      if (ch.channel_codec !== CODEC_OPUS_MUSIC) {
-        issues.push(['codec', t('hintCodec', { codec: CODECS[ch.channel_codec] ?? `codec ${ch.channel_codec}`, quality })]);
-      } else if (quality < MIN_MUSIC_QUALITY) {
-        issues.push(['quality', t('hintQuality', { quality })]);
+      // The native engine always sends Opus Music, which the server relays in any channel.
+      if (!this.voice.playsAnyCodec) {
+        if (ch.codec !== CODEC_OPUS_MUSIC) {
+          issues.push(['codec', t('hintCodec', { codec: CODECS[ch.codec] ?? `codec ${ch.codec}`, quality: ch.quality })]);
+        } else if (ch.quality < MIN_MUSIC_QUALITY) {
+          issues.push(['quality', t('hintQuality', { quality: ch.quality })]);
+        }
       }
-      const needed = Number(ch.channel_needed_talk_power || 0);
-      const have = Number(me.client_talk_power || 0);
-      if (needed > have && me.client_is_talker !== '1') issues.push(['talk', t('hintTalkPower', { needed, have })]);
+      if (ch.neededTalkPower > ch.talkPower && !ch.isTalker) {
+        issues.push(['talk', t('hintTalkPower', { needed: ch.neededTalkPower, have: ch.talkPower })]);
+      }
 
       for (const [issue, message] of issues) {
         this.log.warn(`channel ${cid}: ${message}`);
@@ -623,74 +317,37 @@ export class Bot {
   }
 
   // ---------------------------------------------------------------------------
-  // Notifications and messages
+  // Messages
   // ---------------------------------------------------------------------------
 
-  #onNotify(name, params) {
-    if (name === 'notifyconnectstatuschange') {
-      const prev = this.#status;
-      this.#status = params.status;
-      this.#policy.onStatus(params.status === 'disconnected' ? 'disconnecting' : params.status, Date.now());
-      if (params.status === 'connection_established' && !this.#setupDone) {
-        clearTimeout(this.#reconnectTimer);
-        this.#onConnected();
-      } else if (params.status === 'disconnected') {
-        this.#status = prev; // #onDisconnected wants to know where we came from
-        this.#onDisconnected(params);
-        this.#status = 'disconnected';
-      }
-      return;
-    }
-    if (name === 'notifyclientleftview' && this.#ownClid && params.clid === this.#ownClid) {
-      this.#onOwnLeave(params);
-      return;
-    }
-    if (name === 'notifyclientmoved' && params.clid === this.me.clid) {
-      this.me.cid = params.ctid;
-      this.#diagnoseChannel(params.ctid);
-      return;
-    }
-    if (name === 'notifytextmessage') {
-      this.#onTextMessage(params).catch((err) => this.log.error('command failed:', err));
-    }
-  }
-
-  async #onTextMessage(params) {
-    const { targetmode, invokerid, invokername, invokeruid } = params;
-    if (!params.msg || invokerid === this.me.clid) return;
-    if (targetmode !== TARGET_PRIVATE && targetmode !== TARGET_CHANNEL) return;
-
+  async #onTextMessage({ mode, invokerId, invokerName, invokerUid, text: raw }) {
     const { prefix } = this.config.bot;
-    let text = stripBBCode(params.msg);
+    let text = stripBBCode(raw);
     if (text.startsWith(prefix)) text = text.slice(prefix.length);
-    else if (targetmode !== TARGET_PRIVATE) return; // in private chat the prefix is optional
+    else if (mode !== 'private') return; // in private chat the prefix is optional
 
     const [rawName, ...rest] = text.trim().split(/\s+/);
     const command = this.commands.get((rawName || '').toLowerCase());
+    const reply = (msg) => (mode === 'private' ? this.#sendText({ mode: 'private', clid: invokerId }, msg) : this.sendChannel(msg));
     if (!command) {
-      if (targetmode === TARGET_PRIVATE) await this.#reply(targetmode, invokerid, this.i18n.t('unknownCommand'));
+      if (mode === 'private') await reply(this.i18n.t('unknownCommand'));
       return;
     }
 
-    const ctx = {
-      invokerId: invokerid,
-      invokerName: invokername,
-      invokerUid: invokeruid,
-      reply: (msg) => this.#reply(targetmode, invokerid, msg),
-    };
-    if (!['help', 'whoami'].includes(command.names[0]) && !(await this.#isAllowed(invokerid, invokeruid))) {
-      this.log.info(`denied ${invokername} (${invokeruid}): ${prefix}${rawName}`);
+    const ctx = { invokerId, invokerName, invokerUid, reply };
+    if (!['help', 'whoami'].includes(command.names[0]) && !(await this.#isAllowed(invokerId, invokerUid))) {
+      this.log.info(`denied ${invokerName} (${invokerUid}): ${prefix}${rawName}`);
       await ctx.reply(this.i18n.t('notAllowed'));
       return;
     }
 
-    if (RATE_LIMITED.has(command.names[0]) && !this.#limiter.take(invokeruid || invokerid)) {
-      this.log.info(`rate-limited ${invokername} (${invokeruid}): ${prefix}${rawName}`);
+    if (RATE_LIMITED.has(command.names[0]) && !this.#limiter.take(invokerUid || invokerId)) {
+      this.log.info(`rate-limited ${invokerName} (${invokerUid}): ${prefix}${rawName}`);
       await ctx.reply(this.i18n.t('slowDown'));
       return;
     }
 
-    this.log.info(`${invokername}: ${prefix}${rawName} ${rest.join(' ')}`.trim());
+    this.log.info(`${invokerName}: ${prefix}${rawName} ${rest.join(' ')}`.trim());
     await command.run(ctx, rest.join(' ').trim());
   }
 
@@ -702,31 +359,26 @@ export class Bot {
     if (allowedGroups.length === 0) return false;
     try {
       const { groups } = await this.clientInfo(clid);
-      return groups.some((g) => allowedGroups.includes(g));
+      return groups.some((g) => allowedGroups.includes(String(g)));
     } catch (err) {
       this.log.warn(`could not look up server groups of client ${clid}: ${err.message}`);
       return false;
     }
   }
 
-  async #reply(targetmode, invokerId, text) {
-    if (targetmode === TARGET_PRIVATE) return this.#sendText({ targetmode: 1, target: invokerId }, text);
-    return this.sendChannel(text);
-  }
-
   sendChannel(text) {
-    return this.#sendText({ targetmode: 2 }, text);
+    return this.#sendText({ mode: 'channel' }, text);
   }
 
   /** Messages go out one at a time with a small gap, in the order they were requested. */
   #sendText(target, text) {
     const job = this.#sendQueue.then(async () => {
       for (const chunk of chunkMessage(text)) {
-        if (!this.#cq?.connected) return;
+        if (!this.voice.connected) return;
         try {
-          await this.#cq.send('sendtextmessage', { ...target, msg: chunk });
+          await this.voice.sendText(target, chunk);
         } catch (err) {
-          if (err.id === ERR_FLOODING || /flood/i.test(err.queryMessage ?? '')) {
+          if (err.flood) {
             if (!this.#floodWarned) {
               this.#floodWarned = true;
               this.log.warn("the server's anti-flood is blocking Mendil's messages. Give the bot's server group the " +

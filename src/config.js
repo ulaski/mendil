@@ -41,8 +41,18 @@ export function loadConfig() {
   // Mendil's own persistent files live on the same volume as the TS3 identity.
   const dataDir = env.MENDIL_DATA_DIR || path.join(configDir, 'mendil');
 
+  const backend = (env.VOICE_BACKEND || 'classic').toLowerCase();
+  if (!['classic', 'native'].includes(backend)) {
+    throw new Error(`VOICE_BACKEND must be "classic" or "native", not "${env.VOICE_BACKEND}".`);
+  }
+
   return {
     dataDir,
+    voice: {
+      backend,
+      // Opus bitrate of the native engine (CBR). 192 kbit/s is the most a voice packet holds.
+      bitrate: int(env.NATIVE_BITRATE, 128, { min: 48, max: 192 }),
+    },
     ts3: {
       host,
       port,
