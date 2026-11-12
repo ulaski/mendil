@@ -160,7 +160,7 @@ export class Player extends EventEmitter {
         '-i', 'pipe:0',
         '-vn', ...filters,
         '-ac', '2', '-ar', '48000',
-        '-f', 'pulse', '-device', this.sink, '-name', 'ts3-music-bot',
+        '-f', 'pulse', '-device', this.sink, '-name', 'mendil',
         'music',
       ],
       { stdio: ['pipe', 'ignore', 'pipe'] },

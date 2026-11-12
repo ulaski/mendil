@@ -16,11 +16,6 @@ export function trackLink(track) {
   return `[url=${track.url}]${safe(track.title)}[/url]`;
 }
 
-export function trackLength(track) {
-  if (track.isLive) return 'canlı';
-  return formatDuration(track.duration);
-}
-
 /**
  * TeamSpeak wraps links in BBCode ("[URL]https://…[/URL]" or "[URL=https://…]text[/URL]").
  * Turn them back into plain URLs.

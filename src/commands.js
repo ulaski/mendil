@@ -1,263 +1,253 @@
 import { LOOP_MODES } from './player.js';
 import { resolveTracks, searchTracks } from './ytdlp.js';
-import { formatDuration, safe, trackLength, trackLink } from './format.js';
+import { formatDuration, safe, trackLink } from './format.js';
 
-const LOOP_ALIASES = {
-  off: 'off', kapali: 'off', kapalı: 'off', kapat: 'off',
-  one: 'one', track: 'one', sarki: 'one', şarkı: 'one', tek: 'one',
-  all: 'all', queue: 'all', liste: 'all', hepsi: 'all',
-};
-const LOOP_LABELS = { off: 'kapalı', one: 'şarkı', all: 'liste' };
+const LOOP_ALIASES = { off: 'off', one: 'one', track: 'one', all: 'all', queue: 'all' };
 
 /**
  * Chat commands. Each handler receives (ctx, argText) where ctx has
  * { invokerId, invokerName, invokerUid, reply(text) }.
+ *
+ * Returns a Map of every accepted command name/alias -> command.
  */
 export function createCommands(bot) {
-  const { player, config } = bot;
+  const { player, config, i18n } = bot;
+  const { t } = i18n;
   const p = config.bot.prefix;
   const searchResults = new Map(); // invokerUid -> tracks
 
+  const length = (track) => (track.isLive ? t('live') : formatDuration(track.duration));
+
   async function enqueue(ctx, input, { front = false } = {}) {
-    if (!input) return ctx.reply(`Kullanım: ${p}play <YouTube linki veya arama>`);
-    const free = config.player.maxQueue - player.queue.length;
-    if (free <= 0) return ctx.reply(`Kuyruk dolu (en fazla ${config.player.maxQueue} şarkı).`);
+    if (!input) return ctx.reply(t('usagePlay'));
+    if (player.queue.length >= config.player.maxQueue) return ctx.reply(t('queueFull', { max: config.player.maxQueue }));
 
     let result;
     try {
       result = await resolveTracks(input, config.player);
     } catch (err) {
-      return ctx.reply(`Bulunamadı: ${safe(err.message)}`);
+      return ctx.reply(t('notFound', { reason: safe(err.message) }));
     }
     return addTracks(ctx, result.tracks, { front, playlistTitle: result.playlistTitle });
   }
 
   function addTracks(ctx, found, { front = false, playlistTitle = null } = {}) {
     const max = config.player.maxTrackDuration;
-    let tracks = found.filter((t) => !max || t.isLive || !t.duration || t.duration <= max);
+    let tracks = found.filter((tr) => !max || tr.isLive || !tr.duration || tr.duration <= max);
     const tooLong = found.length - tracks.length;
     tracks = tracks.slice(0, config.player.maxQueue - player.queue.length);
     if (tracks.length === 0) {
-      return ctx.reply(tooLong ? `Şarkı çok uzun (en fazla ${formatDuration(max)}).` : 'Hiçbir sonuç bulunamadı.');
+      return ctx.reply(tooLong ? t('tooLong', { max: formatDuration(max) }) : t('noResults'));
     }
 
-    const requested = tracks.map((t) => ({ ...t, requestedBy: ctx.invokerName }));
+    const requested = tracks.map((tr) => ({ ...tr, requestedBy: ctx.invokerName }));
     const wasIdle = !player.isPlaying;
     const position = front ? 1 : player.queue.length + 1;
     player.add(requested, { front });
 
     if (tracks.length > 1) {
-      const name = playlistTitle ? `[b]${safe(playlistTitle)}[/b] listesinden ` : '';
-      const skipped = tooLong ? ` (${tooLong} uzun şarkı atlandı)` : '';
-      return ctx.reply(`${name}${tracks.length} şarkı kuyruğa eklendi${skipped}.`);
+      const skipped = tooLong ? t('tooLongSkipped', { count: tooLong }) : '';
+      const msg = playlistTitle
+        ? t('playlistAddedFrom', { count: tracks.length, name: `[b]${safe(playlistTitle)}[/b]` })
+        : t('playlistAdded', { count: tracks.length });
+      return ctx.reply(msg.replace(/\.$/, `${skipped}.`));
     }
-    // When idle, the track starts right away and the 'trackStart' announcement covers it.
+    const vars = { track: trackLink(tracks[0]), length: length(tracks[0]) };
+    // When idle the track starts right away and the 'now playing' announcement covers it.
     if (wasIdle && config.bot.announceTracks) return undefined;
-    if (wasIdle) return ctx.reply(`Çalıyor: ${trackLink(tracks[0])} (${trackLength(tracks[0])})`);
-    return ctx.reply(`Kuyruğa eklendi (#${position}): ${trackLink(tracks[0])} (${trackLength(tracks[0])})`);
+    if (wasIdle) return ctx.reply(t('playingNow', vars));
+    return ctx.reply(t('queued', { ...vars, position }));
   }
 
-  function parseIndex(arg, length) {
+  function parseIndex(arg, max) {
     const n = Number.parseInt(arg, 10);
-    return Number.isInteger(n) && n >= 1 && n <= length ? n : null;
+    return Number.isInteger(n) && n >= 1 && n <= max ? n : null;
   }
 
+  // `names[0]` is the canonical English name; i18n.commandAliases can add more.
   const commands = [
     {
-      names: ['play', 'p', 'cal', 'çal'],
-      usage: 'play <link | arama>',
-      help: 'Çalar veya kuyruğun sonuna ekler (YouTube linki, oynatma listesi ya da arama)',
+      names: ['play', 'p'],
       run: (ctx, arg) => enqueue(ctx, arg),
     },
     {
-      names: ['playnext', 'pn', 'siradaki', 'sıradaki'],
-      usage: 'playnext <link | arama>',
-      help: 'Kuyruğun en başına ekler',
+      names: ['playnext', 'pn'],
       run: (ctx, arg) => enqueue(ctx, arg, { front: true }),
     },
     {
-      names: ['search', 'ara'],
-      usage: 'search <arama>',
-      help: "YouTube'da arar, 5 sonuç listeler",
+      names: ['search', 'find'],
       run: async (ctx, arg) => {
-        if (!arg) return ctx.reply(`Kullanım: ${p}search <arama>`);
+        if (!arg) return ctx.reply(t('usageSearch'));
         let results;
         try {
           results = await searchTracks(arg, { count: 5, cookiesFile: config.player.cookiesFile });
         } catch (err) {
-          return ctx.reply(`Arama başarısız: ${safe(err.message)}`);
+          return ctx.reply(t('searchFailed', { reason: safe(err.message) }));
         }
-        if (results.length === 0) return ctx.reply('Sonuç yok.');
+        if (results.length === 0) return ctx.reply(t('noResults'));
         searchResults.set(ctx.invokerUid, results);
-        const lines = results.map((t, i) => `[b]${i + 1}.[/b] ${trackLink(t)} (${trackLength(t)})`);
-        return ctx.reply(`Sonuçlar — seçmek için ${p}pick <numara>:\n${lines.join('\n')}`);
+        const lines = results.map((tr, i) => `[b]${i + 1}.[/b] ${trackLink(tr)} (${length(tr)})`);
+        return ctx.reply(`${t('searchResults')}\n${lines.join('\n')}`);
       },
     },
     {
-      names: ['pick', 'sec', 'seç'],
-      usage: 'pick <numara>',
-      help: `${p}search sonucundan seçip kuyruğa ekler`,
+      names: ['pick'],
       run: (ctx, arg) => {
         const results = searchResults.get(ctx.invokerUid);
-        if (!results) return ctx.reply(`Önce ${p}search ile arama yap.`);
+        if (!results) return ctx.reply(t('searchFirst'));
         const n = parseIndex(arg, results.length);
-        if (!n) return ctx.reply(`1 ile ${results.length} arasında bir numara gir.`);
-        if (player.queue.length >= config.player.maxQueue) return ctx.reply('Kuyruk dolu.');
+        if (!n) return ctx.reply(t('pickRange', { max: results.length }));
+        if (player.queue.length >= config.player.maxQueue) return ctx.reply(t('queueFull', { max: config.player.maxQueue }));
         return addTracks(ctx, [results[n - 1]]);
       },
     },
     {
-      names: ['skip', 's', 'next', 'gec', 'geç'],
-      usage: 'skip',
-      help: 'Çalan şarkıyı geçer',
+      names: ['skip', 's', 'next'],
       run: async (ctx) => {
-        if (!player.current) return ctx.reply('Şu an bir şey çalmıyor.');
+        if (!player.current) return ctx.reply(t('nothingPlaying'));
         // reply first so it shows up before the next track's announcement
-        await ctx.reply(`Geçildi: ${safe(player.current.title)}`);
+        await ctx.reply(t('skipped', { title: safe(player.current.title) }));
         player.skip();
         return undefined;
       },
     },
     {
-      names: ['stop', 'dur'],
-      usage: 'stop',
-      help: 'Durdurur ve kuyruğu temizler',
+      names: ['stop'],
       run: (ctx) => {
         player.stop();
-        return ctx.reply('Durduruldu, kuyruk temizlendi.');
+        return ctx.reply(t('stopped'));
       },
     },
     {
-      names: ['pause', 'duraklat'],
-      usage: 'pause',
-      help: 'Duraklatır',
+      names: ['pause'],
       run: (ctx) => {
-        if (!player.pause()) return ctx.reply(player.paused ? 'Zaten duraklatıldı.' : 'Şu an bir şey çalmıyor.');
+        if (!player.pause()) return ctx.reply(player.paused ? t('alreadyPaused') : t('nothingPlaying'));
         bot.setTransmitting(false);
-        return ctx.reply(`Duraklatıldı. Devam için ${p}resume`);
+        return ctx.reply(t('paused'));
       },
     },
     {
-      names: ['resume', 'devam'],
-      usage: 'resume',
-      help: 'Devam ettirir',
+      names: ['resume', 'unpause'],
       run: (ctx) => {
-        if (!player.resume()) return ctx.reply('Duraklatılmış bir şarkı yok.');
+        if (!player.resume()) return ctx.reply(t('notPaused'));
         bot.setTransmitting(true);
-        return ctx.reply('Devam ediliyor.');
+        return ctx.reply(t('resumed'));
       },
     },
     {
-      names: ['np', 'now', 'nowplaying', 'simdi', 'şimdi'],
-      usage: 'np',
-      help: 'Şu an çalan şarkı',
+      names: ['np', 'now', 'nowplaying'],
       run: (ctx) => {
-        const t = player.current;
-        if (!t) return ctx.reply('Şu an bir şey çalmıyor.');
-        const state = player.paused ? ' [duraklatıldı]' : '';
+        const tr = player.current;
+        if (!tr) return ctx.reply(t('nothingPlaying'));
         return ctx.reply(
-          `Çalıyor: ${trackLink(t)} — ${formatDuration(player.elapsed())} / ${trackLength(t)}${state} — isteyen: ${safe(t.requestedBy)}`,
+          t('nowPlayingDetail', {
+            track: trackLink(tr),
+            elapsed: formatDuration(player.elapsed()),
+            length: length(tr),
+            state: player.paused ? t('pausedTag') : '',
+            user: safe(tr.requestedBy),
+          }),
         );
       },
     },
     {
-      names: ['queue', 'q', 'list', 'liste', 'kuyruk'],
-      usage: 'queue',
-      help: 'Kuyruğu gösterir',
+      names: ['queue', 'q', 'list'],
       run: (ctx) => {
         const lines = [];
-        if (player.current) lines.push(`▶ ${trackLink(player.current)} (${trackLength(player.current)})`);
+        if (player.current) lines.push(`▶ ${trackLink(player.current)} (${length(player.current)})`);
         const shown = player.queue.slice(0, 15);
-        shown.forEach((t, i) => lines.push(`[b]${i + 1}.[/b] ${trackLink(t)} (${trackLength(t)}) — ${safe(t.requestedBy)}`));
-        if (player.queue.length > shown.length) lines.push(`… ve ${player.queue.length - shown.length} şarkı daha`);
-        if (lines.length === 0) return ctx.reply('Kuyruk boş.');
-        const total = player.queue.reduce((sum, t) => sum + (t.duration || 0), 0);
-        lines.push(`Toplam ${player.queue.length} şarkı, ~${formatDuration(total)} — tekrar: ${LOOP_LABELS[player.loop]}`);
+        shown.forEach((tr, i) => lines.push(`[b]${i + 1}.[/b] ${trackLink(tr)} (${length(tr)}) — ${safe(tr.requestedBy)}`));
+        if (player.queue.length > shown.length) lines.push(t('queueMore', { count: player.queue.length - shown.length }));
+        if (lines.length === 0) return ctx.reply(t('queueEmpty'));
+        const total = player.queue.reduce((sum, tr) => sum + (tr.duration || 0), 0);
+        lines.push(
+          t('queueTotal', {
+            count: player.queue.length,
+            duration: formatDuration(total),
+            loop: t(`loopModes.${player.loop}`),
+          }),
+        );
         return ctx.reply(lines.join('\n'));
       },
     },
     {
-      names: ['remove', 'rm', 'sil'],
-      usage: 'remove <numara>',
-      help: 'Kuyruktan şarkı siler',
+      names: ['remove', 'rm'],
       run: (ctx, arg) => {
+        if (player.queue.length === 0) return ctx.reply(t('queueEmpty'));
         const n = parseIndex(arg, player.queue.length);
-        if (!n) return ctx.reply(player.queue.length ? `1 ile ${player.queue.length} arasında bir numara gir.` : 'Kuyruk boş.');
+        if (!n) return ctx.reply(t('pickRange', { max: player.queue.length }));
         const [removed] = player.queue.splice(n - 1, 1);
-        return ctx.reply(`Silindi: ${safe(removed.title)}`);
+        return ctx.reply(t('removed', { title: safe(removed.title) }));
       },
     },
     {
-      names: ['clear', 'temizle'],
-      usage: 'clear',
-      help: 'Kuyruğu temizler (çalan şarkı devam eder)',
+      names: ['clear'],
       run: (ctx) => {
-        const n = player.queue.length;
+        const count = player.queue.length;
         player.queue = [];
-        return ctx.reply(`${n} şarkı kuyruktan silindi.`);
+        return ctx.reply(t('cleared', { count }));
       },
     },
     {
-      names: ['shuffle', 'karistir', 'karıştır'],
-      usage: 'shuffle',
-      help: 'Kuyruğu karıştırır',
+      names: ['shuffle'],
       run: (ctx) => {
         player.shuffle();
-        return ctx.reply('Kuyruk karıştırıldı.');
+        return ctx.reply(t('shuffled'));
       },
     },
     {
-      names: ['loop', 'repeat', 'tekrar'],
-      usage: 'loop [off|one|all]',
-      help: 'Tekrar modu: kapalı / şarkı / liste',
+      names: ['loop', 'repeat'],
       run: (ctx, arg) => {
         if (arg) {
-          const mode = LOOP_ALIASES[arg.toLowerCase()];
-          if (!mode) return ctx.reply(`Geçersiz mod. Seçenekler: ${LOOP_MODES.join(', ')}`);
+          const key = arg.toLowerCase();
+          const mode = LOOP_ALIASES[key] ?? i18n.loopAliases[key];
+          if (!mode) return ctx.reply(t('invalidLoop', { modes: LOOP_MODES.join(', ') }));
           player.loop = mode;
         } else {
           player.loop = LOOP_MODES[(LOOP_MODES.indexOf(player.loop) + 1) % LOOP_MODES.length];
         }
-        return ctx.reply(`Tekrar: ${LOOP_LABELS[player.loop]}`);
+        return ctx.reply(t('loopSet', { mode: t(`loopModes.${player.loop}`) }));
       },
     },
     {
-      names: ['vol', 'volume', 'ses'],
-      usage: 'vol [0-100]',
-      help: 'Ses seviyesini gösterir / ayarlar',
+      names: ['vol', 'volume', 'v'],
       run: async (ctx, arg) => {
-        if (!arg) return ctx.reply(`Ses: ${player.volume}%`);
+        if (!arg) return ctx.reply(t('volume', { volume: player.volume }));
         const n = Number.parseInt(arg.replace('%', ''), 10);
-        if (!Number.isInteger(n) || n < 0 || n > 100) return ctx.reply('0 ile 100 arasında bir değer gir.');
+        if (!Number.isInteger(n) || n < 0 || n > 100) return ctx.reply(t('volumeRange'));
         await player.setVolume(n);
-        return ctx.reply(`Ses: ${player.volume}%`);
+        return ctx.reply(t('volume', { volume: player.volume }));
       },
     },
     {
-      names: ['join', 'gel'],
-      usage: 'join',
-      help: 'Botu bulunduğun kanala çeker',
+      names: ['join', 'come'],
       run: async (ctx) => {
         try {
           await bot.moveToClientChannel(ctx.invokerId);
-          return ctx.reply('Geldim!');
+          return ctx.reply(t('joined'));
         } catch (err) {
-          return ctx.reply(`Kanala geçemedim: ${safe(err.queryMessage || err.message)}`);
+          return ctx.reply(t('joinFailed', { reason: safe(err.queryMessage || err.message) }));
         }
       },
     },
     {
-      names: ['help', 'h', 'yardim', 'yardım', 'komutlar'],
-      usage: 'help',
-      help: 'Bu liste',
+      names: ['help', 'h', 'commands'],
       run: (ctx) => {
-        const lines = commands.map((c) => `[b]${p}${c.usage}[/b] — ${c.help}`);
-        return ctx.reply(`Komutlar:\n${lines.join('\n')}`);
+        const lines = commands.map((c) => {
+          const name = c.names[0];
+          const usage = t(`usage.${name}`);
+          const args = usage === `usage.${name}` ? '' : ` ${usage}`;
+          return `[b]${p}${name}${args}[/b] — ${t(`help.${name}`)}`;
+        });
+        return ctx.reply(`${t('commandsTitle')}\n${lines.join('\n')}`);
       },
     },
   ];
 
   const byName = new Map();
-  for (const cmd of commands) for (const name of cmd.names) byName.set(name, cmd);
+  for (const cmd of commands) {
+    const aliases = i18n.commandAliases[cmd.names[0]] ?? [];
+    for (const name of [...cmd.names, ...aliases]) byName.set(name.toLowerCase(), cmd);
+  }
   return byName;
 }

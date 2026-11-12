@@ -1,6 +1,10 @@
 node_modules
 .env
 .git
+.github
 cookies
+examples
 test
 *.md
+LICENSE
+docker-compose*.yml

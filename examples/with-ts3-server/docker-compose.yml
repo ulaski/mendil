@@ -1,0 +1,39 @@
+# A brand-new TeamSpeak 3 server together with Mendil.
+#
+#   docker compose up -d
+#   docker compose logs teamspeak   # admin token for your first login
+#
+# Mendil reaches the server over the compose network as "teamspeak".
+services:
+  teamspeak:
+    image: teamspeak:latest
+    restart: unless-stopped
+    ports:
+      - "9987:9987/udp"
+      - "30033:30033/tcp"
+    environment:
+      TS3SERVER_LICENSE: accept
+    volumes:
+      - ts3server-data:/var/ts3server/
+
+  mendil:
+    image: ghcr.io/ulaski/mendil:latest
+    platform: linux/amd64
+    restart: unless-stopped
+    init: true
+    shm_size: 256m
+    depends_on: [teamspeak]
+    environment:
+      TS3CLIENT_LICENSE: accept
+      TS3_HOST: teamspeak
+      BOT_NICKNAME: Mendil
+      # TS3_SERVER_PASSWORD: ""
+      # TS3_CHANNEL: "Music"
+    volumes:
+      - ts3client-data:/home/node/.ts3client
+      - ts3client-bin:/opt/ts3client
+
+volumes:
+  ts3server-data:
+  ts3client-data:
+  ts3client-bin:

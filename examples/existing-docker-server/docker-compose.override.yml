@@ -1,0 +1,15 @@
+# Your TeamSpeak server already runs in Docker on the same host (in another compose project).
+#
+# 1. Find its network:        docker network ls        (e.g. "teamspeak_default")
+# 2. Copy this file next to the main docker-compose.yml and adjust the network name.
+# 3. In .env set TS3_HOST to the server's service or container name (e.g. "teamspeak").
+#
+# Docker Compose picks up docker-compose.override.yml automatically.
+services:
+  mendil:
+    networks: [teamspeak]
+
+networks:
+  teamspeak:
+    external: true
+    name: teamspeak_default

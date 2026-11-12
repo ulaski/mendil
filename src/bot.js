@@ -4,13 +4,18 @@ import { ClientQuery } from './ts3/clientquery.js';
 import { Ts3ClientProcess } from './ts3/client-process.js';
 import { Player } from './player.js';
 import { createCommands } from './commands.js';
-import { chunkMessage, safe, stripBBCode, trackLength, trackLink } from './format.js';
+import fs from 'node:fs';
+import { createI18n } from './i18n/index.js';
+import { chunkMessage, formatDuration, safe, stripBBCode, trackLink } from './format.js';
 
 const WATCHDOG_INTERVAL_MS = 10_000;
 const QUERY_STARTUP_GRACE_MS = 90_000; // restart the client if ClientQuery never comes up
 const RECONNECT_MIN_MS = 30_000; // also how long an in-flight connection attempt is given
 const RECONNECT_MAX_MS = 5 * 60_000;
 const ERR_NOT_CONNECTED = 1794;
+
+// Touched while connected to the server; read by the Docker HEALTHCHECK (src/healthcheck.js).
+export const HEALTH_FILE = '/tmp/mendil.healthy';
 
 const TARGET_PRIVATE = '1';
 const TARGET_CHANNEL = '2';
@@ -31,6 +36,8 @@ export class Bot {
     this.config = config;
     this.log = log;
     this.me = { clid: null, cid: null };
+    this.i18n = createI18n(config.bot.language, { prefix: config.bot.prefix });
+    const { t } = this.i18n;
 
     this.client = new Ts3ClientProcess({ ...config.ts3, log: log.child('ts3client') });
     this.player = new Player({ ...config.player, log: log.child('player') });
@@ -40,11 +47,12 @@ export class Bot {
     this.player.on('trackStart', (track) => {
       this.setTransmitting(true);
       if (config.bot.announceTracks) {
-        this.sendChannel(`▶ Çalıyor: ${trackLink(track)} (${trackLength(track)}) — isteyen: ${safe(track.requestedBy)}`);
+        const length = track.isLive ? t('live') : formatDuration(track.duration);
+        this.sendChannel(t('nowPlaying', { track: trackLink(track), length, user: safe(track.requestedBy) }));
       }
     });
     this.player.on('trackError', (track, message) => {
-      this.sendChannel(`Çalınamadı: ${safe(track.title)} — ${safe(message)}`);
+      this.sendChannel(t('playFailed', { title: safe(track.title), reason: safe(message) }));
     });
     this.player.on('idle', () => this.setTransmitting(false));
   }
@@ -62,7 +70,7 @@ export class Bot {
     clearInterval(this.#watchdogTimer);
     this.player.stop();
     try {
-      if (this.#cq?.connected) await this.#cq.send('disconnect', { msg: 'Bot kapanıyor' });
+      if (this.#cq?.connected) await this.#cq.send('disconnect', { msg: this.i18n.t('shuttingDown') });
     } catch {
       // ignore
     }
@@ -116,6 +124,7 @@ export class Bot {
       const [me] = await this.#cq.send('whoami');
       if (this.#status !== 'connection_established') await this.#onConnected();
       this.me = { clid: me.clid, cid: me.cid };
+      this.#markHealthy(true);
     } catch (err) {
       if (err.id !== ERR_NOT_CONNECTED) throw err;
       if (Date.now() - this.#lastConnectAttempt < this.#reconnectDelay) return; // attempt in flight / backoff
@@ -220,6 +229,15 @@ export class Bot {
     }
   }
 
+  #markHealthy(healthy) {
+    try {
+      if (healthy) fs.writeFileSync(HEALTH_FILE, String(Date.now()));
+      else fs.rmSync(HEALTH_FILE, { force: true });
+    } catch {
+      // best effort
+    }
+  }
+
   async setTransmitting(on) {
     if (this.#transmitting === on || !this.#cq?.connected || this.#status !== 'connection_established') return;
     try {
@@ -234,7 +252,7 @@ export class Bot {
   async moveToClientChannel(clid) {
     const clients = await this.#cq.send('clientlist');
     const target = clients.find((c) => c.clid === String(clid));
-    if (!target) throw new Error('seni bulamadım');
+    if (!target) throw new Error(this.i18n.t('clientNotFound'));
     if (target.cid === this.me.cid) return;
     await this.#cq.send('clientmove', { cid: target.cid, clid: this.me.clid });
     this.me.cid = target.cid;
@@ -254,7 +272,15 @@ export class Bot {
       } else if (params.status === 'disconnected') {
         this.me = { clid: null, cid: null };
         this.#transmitting = null;
+        this.#markHealthy(false);
         this.log.warn(`disconnected from server${params.error && params.error !== '0' ? ` (error ${params.error})` : ''}`);
+        if (prev !== 'connection_established') {
+          // TS3 servers reject a wrong/missing password without an error code or a log line.
+          this.log.warn(
+            'the server refused the connection. If this keeps happening, check TS3_SERVER_PASSWORD, ' +
+              'whether the bot is banned and whether the server is full.',
+          );
+        }
       }
       return;
     }
@@ -280,7 +306,7 @@ export class Bot {
     const [rawName, ...rest] = text.trim().split(/\s+/);
     const command = this.commands.get((rawName || '').toLowerCase());
     if (!command) {
-      if (targetmode === TARGET_PRIVATE) await this.#reply(targetmode, invokerid, `Bilinmeyen komut. ${prefix}help yaz.`);
+      if (targetmode === TARGET_PRIVATE) await this.#reply(targetmode, invokerid, this.i18n.t('unknownCommand'));
       return;
     }
 
@@ -291,7 +317,7 @@ export class Bot {
       reply: (msg) => this.#reply(targetmode, invokerid, msg),
     };
     if (allowedUids.length > 0 && !allowedUids.includes(invokeruid) && command.names[0] !== 'help') {
-      await ctx.reply('Bu botu kullanma yetkin yok.');
+      await ctx.reply(this.i18n.t('notAllowed'));
       return;
     }
 

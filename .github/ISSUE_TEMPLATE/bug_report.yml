@@ -1,0 +1,39 @@
+name: Bug report
+description: Something doesn't work
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Please remove passwords, IP addresses and other private data from logs before posting.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Bot log
+      description: Output of `docker compose logs mendil`, ideally with `LOG_LEVEL=debug`.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Bot version / image tag
+      placeholder: e.g. 0.1.0 or a commit hash
+  - type: input
+    id: host
+    attributes:
+      label: Host OS and CPU architecture
+      placeholder: e.g. Ubuntu 24.04, x86_64
+  - type: dropdown
+    id: setup
+    attributes:
+      label: Where does the TeamSpeak server run?
+      options:
+        - Another machine
+        - Same host, in Docker
+        - Same host, not in Docker
+        - Hosted by a provider
