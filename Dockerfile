@@ -4,7 +4,7 @@
 # docker/entrypoint.sh downloads it on first start once you accept its license
 # (TS3CLIENT_LICENSE=accept). It only exists for x86_64, hence linux/amd64 only.
 # Pinned; Dependabot (.github/dependabot.yml) proposes updates.
-FROM node:22.23.5-bookworm-slim
+FROM node:26.13.0-bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
