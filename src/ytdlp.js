@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { promisify } from 'node:util';
+import { UrlGuard } from './netguard.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -22,6 +23,10 @@ const GLOBAL_ERRORS = [
 export function isGlobalError(text) {
   return GLOBAL_ERRORS.some((re) => re.test(text));
 }
+
+/** Largest file yt-dlp may download for one track (prefetch and streaming). */
+export const MAX_FILESIZE = '200M';
+export const MAX_FILESIZE_BYTES = 200 * 1024 * 1024;
 
 export const YOUTUBE_DOCS_URL = 'https://github.com/ulaski/mendil/blob/main/docs/youtube.md';
 
@@ -89,13 +94,15 @@ export function isUrl(text) {
   return /^https?:\/\/\S+$/i.test(text);
 }
 
-function toTrack(entry) {
+export function toTrack(entry) {
   if (!entry) return null;
   let url = entry.webpage_url || entry.original_url || entry.url;
   if ((!url || !isUrl(url)) && entry.id && /youtube/i.test(entry.ie_key || entry.extractor || 'youtube')) {
     url = `https://www.youtube.com/watch?v=${entry.id}`;
   }
-  if (!url) return null;
+  // Only plain web addresses: an entry "URL" from a crafted playlist or feed could otherwise
+  // be anything, including a string yt-dlp would read as an option.
+  if (!url || !isUrl(url)) return null;
   // Deleted/private playlist entries
   if (/^\[(deleted|private) video\]$/i.test(entry.title || '')) return null;
   return {
@@ -107,7 +114,8 @@ function toTrack(entry) {
 }
 
 async function dumpJson(target, extraArgs, opts) {
-  const args = [...baseArgs(opts), '-J', '--flat-playlist', '--no-playlist', ...extraArgs, target];
+  // "--" ends the options: whatever the target is, yt-dlp treats it as a URL.
+  const args = [...baseArgs(opts), '-J', '--flat-playlist', '--no-playlist', ...extraArgs, '--', target];
   return resolveSlots.run(async () => {
     try {
       const { stdout } = await execFileAsync('yt-dlp', args, { maxBuffer: 64 * 1024 * 1024, timeout: 60_000 });
@@ -120,21 +128,38 @@ async function dumpJson(target, extraArgs, opts) {
   });
 }
 
+const guards = new Map();
+function guardFor({ urlGuard, allowPrivateUrls = false }) {
+  if (urlGuard) return urlGuard;
+  if (!guards.has(allowPrivateUrls)) guards.set(allowPrivateUrls, new UrlGuard({ allowPrivate: allowPrivateUrls }));
+  return guards.get(allowPrivateUrls);
+}
+
+/** Drops tracks whose URL points to a private network. */
+async function publicOnly(tracks, guard) {
+  const ok = await Promise.all(tracks.map((t) => guard.isAllowed(t.url)));
+  return tracks.filter((_, i) => ok[i]);
+}
+
 /**
  * Resolves user input into tracks:
  *  - a video URL           -> 1 track ("&list=" in a watch URL is ignored)
  *  - a playlist URL        -> up to maxPlaylistItems tracks
  *  - anything else         -> first YouTube search result
+ * URLs on private networks (and playlist entries pointing there) are refused unless
+ * allowPrivateUrls is set; see netguard.js.
  */
-export async function resolveTracks(input, { maxPlaylistItems = 50, cookiesFile, cacheDir, proxy } = {}) {
+export async function resolveTracks(input, { maxPlaylistItems = 50, cookiesFile, cacheDir, proxy, allowPrivateUrls, urlGuard } = {}) {
+  const guard = guardFor({ urlGuard, allowPrivateUrls });
+  if (isUrl(input)) await guard.assertAllowed(input);
   const target = isUrl(input) ? input : `ytsearch1:${input}`;
   const json = await dumpJson(target, ['--playlist-end', String(maxPlaylistItems)], { cookiesFile, cacheDir, proxy });
   const entries = json._type === 'playlist' ? json.entries || [] : [json];
-  const tracks = entries.map(toTrack).filter(Boolean);
+  const tracks = await publicOnly(entries.map(toTrack).filter(Boolean), guard);
   return { tracks, playlistTitle: json._type === 'playlist' && isUrl(input) ? json.title : null };
 }
 
-export async function searchTracks(query, { count = 5, cookiesFile, cacheDir, proxy } = {}) {
+export async function searchTracks(query, { count = 5, cookiesFile, cacheDir, proxy, allowPrivateUrls, urlGuard } = {}) {
   const json = await dumpJson(`ytsearch${count}:${query}`, [], { cookiesFile, cacheDir, proxy });
-  return (json.entries || []).map(toTrack).filter(Boolean);
+  return publicOnly((json.entries || []).map(toTrack).filter(Boolean), guardFor({ urlGuard, allowPrivateUrls }));
 }

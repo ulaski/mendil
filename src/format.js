@@ -12,8 +12,11 @@ export function safe(text) {
   return String(text).replace(/\[/g, '(').replace(/\]/g, ')');
 }
 
+/** A clickable title. The URL is percent-encoded where BBCode would break ([ ] and whitespace). */
 export function trackLink(track) {
-  return `[url=${track.url}]${safe(track.title)}[/url]`;
+  const url = String(track.url).replace(/[\[\]\s]/g, (c) => encodeURIComponent(c));
+  if (!/^https?:\/\//i.test(url)) return safe(track.title);
+  return `[url=${url}]${safe(track.title)}[/url]`;
 }
 
 /**

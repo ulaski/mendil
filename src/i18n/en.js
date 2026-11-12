@@ -15,6 +15,8 @@ export default {
   nothingPlaying: 'Nothing is playing right now.',
   pickRange: 'Enter a number between 1 and {max}.',
   busy: "I'm handling a lot of requests right now — try again in a moment.",
+  slowDown: 'Slow down a little: try again in a few seconds.',
+  blockedUrl: "That address is on a private network, so I won't open it.",
 
   // play / queue
   usagePlay: 'Usage: {prefix}play <YouTube link or search terms>',

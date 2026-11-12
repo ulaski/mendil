@@ -29,6 +29,7 @@ export function createCommands(bot) {
       bot.recordResolve?.(Date.now() - started);
     } catch (err) {
       if (err.busy) return ctx.reply(t('busy'));
+      if (err.blockedUrl) return ctx.reply(t('blockedUrl'));
       if (isYoutubeBlock(err.message)) return ctx.reply(t('youtubeBlocked', { url: YOUTUBE_DOCS_URL }));
       return ctx.reply(t('notFound', { reason: safe(err.message) }));
     }

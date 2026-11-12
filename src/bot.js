@@ -10,11 +10,15 @@ import { Prefetcher } from './prefetch.js';
 import { ReconnectPolicy } from './reconnect.js';
 import { StateStore } from './state.js';
 import { StatsReporter } from './stats.js';
+import { RateLimiter } from './ratelimit.js';
 import { YtdlpUpdater } from './ytdlp-update.js';
 import { createCommands } from './commands.js';
 import { createI18n } from './i18n/index.js';
 import { chunkMessage, formatDuration, safe, stripBBCode, trackLink } from './format.js';
 import { isYoutubeBlock, YOUTUBE_DOCS_URL } from './ytdlp.js';
+
+// Commands that start a yt-dlp lookup; each user gets a few at once, then one every few seconds.
+const RATE_LIMITED = new Set(['play', 'playnext', 'search']);
 
 const WATCHDOG_INTERVAL_MS = 10_000;
 const QUERY_STARTUP_GRACE_MS = 90_000; // restart the client if ClientQuery never comes up
@@ -93,6 +97,7 @@ export class Bot {
   #diagnosing = new Map(); // cid -> running check (a move triggers it twice)
   #floodWarned = false;
   #groupCache = new Map(); // clid -> { uid, groups, at }
+  #limiter = new RateLimiter(); // per user, for commands that start yt-dlp
   #stats = new StatsReporter();
 
   constructor(config, log) {
@@ -557,8 +562,9 @@ export class Bot {
     const target = clients.find((c) => c.clid === String(clid));
     if (!target) throw new Error(this.i18n.t('clientNotFound'));
     if (target.cid === this.me.cid) return;
+    // me.cid is updated by the move notification (which also runs the channel check), so a
+    // refused move doesn't leave it pointing at the wrong channel.
     await this.#cq.send('clientmove', { cid: target.cid, clid: this.me.clid });
-    this.me.cid = target.cid; // the move notification runs the channel check
   }
 
   /** Unique id and server group ids of a client (cached briefly). */
@@ -654,7 +660,7 @@ export class Bot {
     if (!params.msg || invokerid === this.me.clid) return;
     if (targetmode !== TARGET_PRIVATE && targetmode !== TARGET_CHANNEL) return;
 
-    const { prefix, allowedUids } = this.config.bot;
+    const { prefix } = this.config.bot;
     let text = stripBBCode(params.msg);
     if (text.startsWith(prefix)) text = text.slice(prefix.length);
     else if (targetmode !== TARGET_PRIVATE) return; // in private chat the prefix is optional
@@ -675,6 +681,12 @@ export class Bot {
     if (!['help', 'whoami'].includes(command.names[0]) && !(await this.#isAllowed(invokerid, invokeruid))) {
       this.log.info(`denied ${invokername} (${invokeruid}): ${prefix}${rawName}`);
       await ctx.reply(this.i18n.t('notAllowed'));
+      return;
+    }
+
+    if (RATE_LIMITED.has(command.names[0]) && !this.#limiter.take(invokeruid || invokerid)) {
+      this.log.info(`rate-limited ${invokername} (${invokeruid}): ${prefix}${rawName}`);
+      await ctx.reply(this.i18n.t('slowDown'));
       return;
     }
 

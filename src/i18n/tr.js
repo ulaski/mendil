@@ -12,6 +12,8 @@ export default {
   nothingPlaying: 'Şu an bir şey çalmıyor.',
   pickRange: '1 ile {max} arasında bir numara gir.',
   busy: 'Şu an çok fazla istek var — birazdan tekrar dene.',
+  slowDown: 'Biraz yavaş: birkaç saniye sonra tekrar dene.',
+  blockedUrl: 'Bu adres özel bir ağda, o yüzden açmıyorum.',
 
   usagePlay: 'Kullanım: {prefix}play <YouTube linki veya arama>',
   queueFull: 'Kuyruk dolu (en fazla {max} şarkı).',

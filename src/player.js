@@ -2,7 +2,7 @@ import { spawn, execFile } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { promisify } from 'node:util';
 import { AUDIO_FORMAT } from './prefetch.js';
-import { baseArgs, isGlobalError, summarizeError, ytdlpEvents } from './ytdlp.js';
+import { MAX_FILESIZE, baseArgs, isGlobalError, summarizeError, ytdlpEvents } from './ytdlp.js';
 
 const execFileAsync = promisify(execFile);
 const STDERR_TAIL = 4096;
@@ -11,6 +11,7 @@ const DEFAULT_TIMING = {
   watchIntervalMs: 1_000,
   stallMs: 20_000, // no audio progress for this long (while not paused) = stalled
   startTimeoutMs: { file: 20_000, stream: 90_000 },
+  overrunSlackS: 120, // a track may play this much past its stated length before it is stopped
 };
 const TRUNCATION_SLACK_S = 10; // ended this much before its known duration = cut short
 const MAX_RETRIES = 1; // per track, for cut-short or stalled playback
@@ -92,12 +93,13 @@ export class Player extends EventEmitter {
   #failures = 0;
   #lastEndAt = 0;
 
-  constructor({ sink, defaultVolume, normalize, cookiesFile, cacheDir, proxy, prefetcher = null, log, bin = {}, timing = {} }) {
+  constructor({ sink, defaultVolume, normalize, cookiesFile, cacheDir, proxy, maxTrackDuration = 0, prefetcher = null, log, bin = {}, timing = {} }) {
     super();
     this.sink = sink;
     this.volume = defaultVolume;
     this.normalize = normalize;
     this.ytOpts = { cookiesFile, cacheDir, proxy };
+    this.maxTrackDuration = maxTrackDuration;
     this.prefetcher = prefetcher;
     this.log = log;
     this.bin = { ytdlp: 'yt-dlp', ffmpeg: 'ffmpeg', ...bin };
@@ -225,7 +227,9 @@ export class Player extends EventEmitter {
     const resumeFrom = state.current
       ? [{ ...plainTrack(state.current), startAt: Math.max(0, Math.floor(state.current.position ?? 0) - 3) }]
       : [];
-    this.queue = [...resumeFrom, ...(state.queue ?? []).map(plainTrack)];
+    // A state file is data from disk: only keep entries that look like tracks.
+    const valid = (t) => typeof t?.url === 'string' && t.url !== '' && !t.url.startsWith('-');
+    this.queue = [...resumeFrom, ...(state.queue ?? []).map(plainTrack)].filter(valid);
     if (LOOP_MODES.includes(state.loop)) this.loop = state.loop;
     if (Number.isFinite(state.volume)) this.volume = Math.max(0, Math.min(100, state.volume));
     return { tracks: this.queue.length, paused: Boolean(state.paused) };
@@ -325,8 +329,9 @@ export class Player extends EventEmitter {
         ...baseArgs(this.ytOpts),
         '-f', track.isLive ? LIVE_FORMAT : AUDIO_FORMAT,
         '--no-playlist', '--no-progress', '--quiet',
+        ...(track.isLive ? [] : ['--max-filesize', MAX_FILESIZE]),
         '-o', '-',
-        track.url,
+        '--', track.url, // "--": the URL can never be read as an option
       ], { stdio: ['ignore', 'pipe', 'pipe'], detached: true }); // own group: see killProcessGroup()
       // -ss after -i: input is a pipe, so decode and drop up to the offset
       ff = spawn(this.bin.ffmpeg, ['-hide_banner', '-loglevel', 'error', '-i', 'pipe:0', ...seek,
@@ -368,8 +373,15 @@ export class Player extends EventEmitter {
     procs.watch = setInterval(() => {
       if (session !== this.#session) return;
       const now = Date.now();
+      const ceiling = this.#maxPosition(track);
       if (this.paused) {
         procs.lastProgressAt = now;
+      } else if (procs.started && track.position > ceiling) {
+        // A source that keeps sending audio far past its stated length (or past
+        // MAX_TRACK_DURATION) would otherwise play forever.
+        this.log.warn(`stopping ${track.title} at ${Math.floor(track.position)}s: longer than ${Math.floor(ceiling)}s`);
+        procs.overrun = true;
+        this.#killPipeline(procs);
       } else if (!procs.started && now - procs.spawnedAt > this.timing.startTimeoutMs[mode]) {
         ffErr = tail(ffErr, 'ERROR: timed out waiting for audio\n');
         procs.stalled = 'start';
@@ -423,6 +435,10 @@ export class Player extends EventEmitter {
       this.#advance({ error: summarizeError(ffErr), global: true });
       return;
     }
+    if (procs.overrun) {
+      this.#advance();
+      return;
+    }
     const cutShort = procs.stalled === 'mid'
       || ffCode !== 0
       || (ytCode !== null && ytCode !== 0)
@@ -437,6 +453,14 @@ export class Player extends EventEmitter {
     if (cutShort) this.log.warn(`track ended early at ${Math.floor(track.position)}s, giving up: ${track.title}`);
     else this.lastGoodUrl = track.url;
     this.#advance();
+  }
+
+  /** How far a track may play before it is stopped: its length plus slack, capped by MAX_TRACK_DURATION. */
+  #maxPosition(track) {
+    const limits = [];
+    if (!track.isLive && Number.isFinite(track.duration) && track.duration > 0) limits.push(track.duration + this.timing.overrunSlackS);
+    if (this.maxTrackDuration > 0) limits.push(this.maxTrackDuration);
+    return limits.length ? Math.min(...limits) : Infinity;
   }
 
   #killPipeline(procs) {

@@ -5,6 +5,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Security
+- A crafted playlist or feed could make yt-dlp run a command inside the container: an entry whose "URL" was really a yt-dlp option was passed on unchecked. Entries must now be http(s) URLs, and every yt-dlp call ends its options with `--`. Please update.
+- `!play` no longer opens addresses on private networks (localhost, LAN, cloud metadata). `ALLOW_PRIVATE_URLS=true` allows them again.
+- Passwords and API keys are masked in the debug log.
+- Links in chat messages are encoded so a crafted URL can't inject BBCode.
+- The TeamSpeak client download is checked against TeamSpeak's published SHA-256 (`TS3_CLIENT_SHA256` for other versions).
+
+### Changed
+- Each user can start a few searches or `!play` lookups at once, then one every few seconds.
+- A track that keeps playing far past its stated length is stopped, and `MAX_TRACK_DURATION` now applies to live streams too.
+- Streamed tracks get the same 200 MB download limit as downloaded ones, and downloads are stopped at 200 MB even when the server doesn't announce the size.
+
+### Fixed
+- After `!join`, the bot no longer assumes the move worked before the server confirms it.
+
 ## [0.1.0] - 2026-11-13
 
 First public version of 🧻 Mendil.

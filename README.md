@@ -183,13 +183,15 @@ All settings are environment variables, usually set in `.env`.
 | `NORMALIZE_AUDIO` | `true` | Loudness-normalise tracks to -16 LUFS |
 | `MAX_QUEUE` | `100` | Max queue length |
 | `MAX_PLAYLIST_ITEMS` | `50` | Max tracks taken from one playlist |
-| `MAX_TRACK_DURATION` | `0` | Max track length in seconds. `0` means unlimited. |
+| `MAX_TRACK_DURATION` | `0` | Max track length in seconds, live streams included. `0` means unlimited. |
 | `PREFETCH` | `true` | Download tracks before playing them, so there are no gaps and network hiccups don't matter. `false` streams everything. |
 | `PREFETCH_MAX_DURATION` | `1800` | Longer tracks (in seconds) and live streams are streamed instead of downloaded |
 | `YTDLP_AUTO_UPDATE` | `true` | Keep yt-dlp up to date in the background (daily, and when YouTube extraction breaks). A new version that fails a self-test is rolled back. |
 | `YTDLP_COOKIES_FILE` | | Cookies file for YouTube, see [docs/youtube.md](docs/youtube.md) |
 | `YTDLP_PROXY` | | Proxy for YouTube traffic only, e.g. `socks5://user:pass@host:1080` |
+| `ALLOW_PRIVATE_URLS` | `false` | Let `!play` open addresses on private networks (LAN, localhost), e.g. a media server at home. Off by default, see [SECURITY.md](SECURITY.md). |
 | `TS3_CLIENT_VERSION` | `3.6.2` | TeamSpeak client version to download |
+| `TS3_CLIENT_SHA256` | | Expected SHA-256 of that download. Known for 3.6.2; set it if you change the version. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
 
 ## Updating
@@ -198,6 +200,8 @@ All settings are environment variables, usually set in `.env`.
 docker compose pull && docker compose up -d
 # from source: git pull && docker compose up -d --build
 ```
+
+`latest` always points to the newest release. To stay on a version you've tested, use its tag instead, e.g. `image: ghcr.io/ulaski/mendil:0.1.0`.
 
 yt-dlp also updates itself in the background, daily and whenever YouTube extraction starts failing, so most YouTube changes need no action.
 
@@ -249,6 +253,9 @@ TeamSpeak has announced that TS3 reaches end-of-life at the end of 2027, but has
 
 **Spotify / SoundCloud?**
 yt-dlp supports SoundCloud and many other sites, and direct links usually work. Spotify doesn't serve audio to third parties.
+
+**Who can use the bot?**
+By default everyone who can write to it, and `!play` takes links to any site yt-dlp supports. On a public server, limit it with `ALLOWED_UIDS` or `ALLOWED_GROUPS`. Each user can start a few searches at once and then one every few seconds, so one person can't keep the bot busy for everyone.
 
 ## Development
 

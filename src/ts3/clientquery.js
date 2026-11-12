@@ -12,6 +12,11 @@ export class QueryError extends Error {
 
 const COMMAND_TIMEOUT_MS = 10_000;
 
+/** A command line for the debug log, with passwords and keys replaced by "***". */
+export function redact(line) {
+  return line.replace(/(^|\s)(apikey|password|channel_pw|cpw|client_server_password)=\S*/g, '$1$2=***');
+}
+
 /**
  * Minimal client for the TeamSpeak 3 *ClientQuery* plugin (telnet on 127.0.0.1:25639).
  *
@@ -107,7 +112,7 @@ export class ClientQuery extends EventEmitter {
       this.#current = null;
       this.#socket?.destroy();
     }, COMMAND_TIMEOUT_MS);
-    this.log.debug('>>', cmd.line.startsWith('auth') ? 'auth apikey=***' : cmd.line);
+    this.log.debug('>>', redact(cmd.line));
     this.#socket.write(`${cmd.line}\n`);
   }
 

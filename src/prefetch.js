@@ -2,11 +2,11 @@ import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { baseArgs, isGlobalError, summarizeError, ytdlpEvents } from './ytdlp.js';
+import { MAX_FILESIZE, MAX_FILESIZE_BYTES, baseArgs, isGlobalError, summarizeError, ytdlpEvents } from './ytdlp.js';
 
 export const AUDIO_FORMAT = 'bestaudio[ext=webm]/bestaudio/best';
 const DOWNLOAD_TIMEOUT_MS = 3 * 60_000;
-const MAX_FILESIZE = '200M';
+const SIZE_CHECK_MS = 2_000;
 const STDERR_TAIL = 4096;
 
 const keyOf = (track) => crypto.createHash('sha1').update(track.url).digest('hex').slice(0, 16);
@@ -129,7 +129,7 @@ export class Prefetcher {
         '--max-filesize', MAX_FILESIZE,
         '-o', template,
         '--print', 'after_move:filepath', '--no-simulate',
-        track.url,
+        '--', track.url, // "--": the URL can never be read as an option
       ], { stdio: ['ignore', 'pipe', 'pipe'], detached: true });
       job.child = yt;
       let stdout = '';
@@ -140,11 +140,25 @@ export class Prefetcher {
         job.timedOut = true;
         killGroup(yt, 'SIGKILL');
       }, DOWNLOAD_TIMEOUT_MS);
+      // --max-filesize only works when the server announces the size up front, so also
+      // watch what actually lands on disk.
+      const sizeWatch = setInterval(() => {
+        if (this.#bytesOnDisk(job.key) > MAX_FILESIZE_BYTES) {
+          job.tooBig = true;
+          killGroup(yt, 'SIGKILL');
+        }
+      }, SIZE_CHECK_MS);
+      sizeWatch.unref?.();
       yt.on('error', (err) => (stderr += `\nERROR: ${err.message}`));
       yt.on('close', (code) => {
         clearTimeout(timer);
+        clearInterval(sizeWatch);
         job.child = null;
         if (job.cancelled) return resolve({ cancelled: true });
+        if (job.tooBig) {
+          this.#removeFiles(job.key);
+          return resolve({ error: `file larger than ${MAX_FILESIZE}`, global: false });
+        }
         if (job.timedOut) return resolve({ timeout: true });
         const file = stdout.trim().split('\n').pop();
         if (code === 0 && file && fs.existsSync(file)) return resolve({ file });
@@ -161,6 +175,23 @@ export class Prefetcher {
     return { file: result.file, gainDb: gainDb === null ? null : Math.round(gainDb * 10) / 10 };
   }
 
+  #bytesOnDisk(key) {
+    try {
+      return fs.readdirSync(this.dir).filter((f) => f.startsWith(key))
+        .reduce((sum, f) => sum + fs.statSync(path.join(this.dir, f)).size, 0);
+    } catch {
+      return 0;
+    }
+  }
+
+  #removeFiles(key) {
+    try {
+      for (const f of fs.readdirSync(this.dir)) if (f.startsWith(key)) fs.rmSync(path.join(this.dir, f), { force: true });
+    } catch {
+      // directory gone
+    }
+  }
+
   #drop(key) {
     const job = this.#jobs.get(key);
     this.#jobs.delete(key);
@@ -168,10 +199,6 @@ export class Prefetcher {
       job.cancelled = true;
       if (job.child) killGroup(job.child);
     }
-    try {
-      for (const f of fs.readdirSync(this.dir)) if (f.startsWith(key)) fs.rmSync(path.join(this.dir, f), { force: true });
-    } catch {
-      // directory gone
-    }
+    this.#removeFiles(key);
   }
 }

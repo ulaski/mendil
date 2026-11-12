@@ -181,3 +181,56 @@ test('snapshot/restore resumes the current track a few seconds before where it w
   assert.deepEqual(snap.queue.map((t) => t.url), ['ok://b']);
   player.stop();
 });
+
+// --- hardening (review 2026-11) ------------------------------------------------------
+
+test('yt-dlp gets "--" before the URL, so a URL can never be read as an option', async () => {
+  const { player, calls, dir } = setup();
+  player.add([track('ok://a')]);
+  await waitFor(() => calls().some((c) => c.bin === 'yt-dlp'));
+  const args = calls().find((c) => c.bin === 'yt-dlp').args;
+  assert.equal(args.at(-2), '--');
+  assert.equal(args.at(-1), 'ok://a');
+  player.dispose();
+  fs.rmSync(dir, { recursive: true, force: true });
+
+  const p2 = setup({ prefetch: true });
+  p2.player.add([track('ok://b')]);
+  await waitFor(() => p2.calls().some((c) => c.bin === 'yt-dlp' && c.args.includes('--print')));
+  const dl = p2.calls().find((c) => c.bin === 'yt-dlp' && c.args.includes('--print')).args;
+  assert.deepEqual(dl.slice(-2), ['--', 'ok://b']);
+  p2.player.dispose();
+});
+
+test('a stream that plays far past its stated length is stopped and not retried', async () => {
+  const dir = tmp();
+  process.env.FAKE_LOG = path.join(dir, 'calls.log');
+  const player = new Player({ sink: 'test', defaultVolume: 50, normalize: false, log: quietLog, bin,
+    timing: { ...fastTiming, overrunSlackS: 0.4 } });
+  const starts = [];
+  player.on('trackStart', (t) => starts.push(t.url));
+  let idle = false;
+  player.on('idle', () => (idle = true));
+  player.add([track('ok://long', { duration: 0.3 })]); // the fake streams for 30 s
+  const t0 = Date.now();
+  await waitFor(() => idle, 8_000);
+  assert.ok(Date.now() - t0 < 5_000, 'stopped well before the source ended');
+  assert.deepEqual(starts, ['ok://long']); // no retry
+  player.dispose();
+});
+
+test('MAX_TRACK_DURATION caps live streams too', async () => {
+  const player = new Player({ sink: 'test', defaultVolume: 50, normalize: false, log: quietLog, bin,
+    timing: fastTiming, maxTrackDuration: 1 });
+  let idle = false;
+  player.on('idle', () => (idle = true));
+  player.add([track('ok://long', { duration: null, isLive: true })]);
+  await waitFor(() => idle, 8_000);
+  player.dispose();
+});
+
+test('restore drops queue entries whose URL looks like an option', () => {
+  const { player } = setup();
+  player.restore({ queue: [track('ok://a'), track('--exec=touch /tmp/x'), { title: 'x' }], current: null });
+  assert.deepEqual(player.queue.map((t) => t.url), ['ok://a']);
+});

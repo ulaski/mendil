@@ -69,6 +69,7 @@ export function loadConfig() {
       maxQueue: int(env.MAX_QUEUE, 100, { min: 1 }),
       maxPlaylistItems: int(env.MAX_PLAYLIST_ITEMS, 50, { min: 1 }),
       maxTrackDuration: int(env.MAX_TRACK_DURATION, 0, { min: 0 }),
+      allowPrivateUrls: bool(env.ALLOW_PRIVATE_URLS, false),
       cookiesFile: env.YTDLP_COOKIES_FILE || '',
       proxy: env.YTDLP_PROXY || '',
       cacheDir: path.join(dataDir, 'yt-dlp-cache'), // player JS etc.; speeds up extraction

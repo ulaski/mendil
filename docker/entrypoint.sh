@@ -25,6 +25,23 @@ Read its license (https://www.teamspeak.com/en/privacy-and-terms/) and set TS3CL
   tmp="$(mktemp -d)"
   log "downloading TeamSpeak client ${TS3_CLIENT_VERSION}…"
   curl -fsSL -o "$tmp/ts3client.run" "$url" || die "download failed: $url"
+
+  # Check the download against the SHA-256 that TeamSpeak lists on its downloads page.
+  # Other versions: set TS3_CLIENT_SHA256 yourself, or the download is used unverified.
+  local expected="${TS3_CLIENT_SHA256:-}"
+  if [ -z "$expected" ]; then
+    case "$TS3_CLIENT_VERSION" in
+      3.6.2) expected=59f110438971a23f904a700e7dd0a811cf99d4e6b975ba3aa45962d43b006422 ;;
+    esac
+  fi
+  local actual
+  actual="$(sha256sum "$tmp/ts3client.run" | cut -d' ' -f1)"
+  if [ -n "$expected" ]; then
+    [ "$actual" = "$expected" ] || { rm -rf "$tmp"; die "checksum mismatch for the TeamSpeak client download (expected $expected, got $actual)"; }
+    log "TeamSpeak client download verified (sha256 $actual)"
+  else
+    log "WARNING: no known checksum for TeamSpeak client ${TS3_CLIENT_VERSION}; set TS3_CLIENT_SHA256 to verify it (got sha256 $actual)"
+  fi
   rm -rf "${TS3_CLIENT_DIR:?}/"* "${TS3_CLIENT_DIR}/".[!.]* 2>/dev/null || true
   # --accept: the license was accepted above via TS3CLIENT_LICENSE=accept
   # (its progress meter goes to stderr without newlines, so keep it out of the logs)
