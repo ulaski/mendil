@@ -98,6 +98,11 @@ export class OpusStream {
     this.#anchor();
   }
 
+  /** Seconds of audio sent so far. */
+  get playedSeconds() {
+    return (this.stats.frames * FRAME_MS) / 1000;
+  }
+
   #onPacket(packet) {
     if (packet.length > MAX_FRAME_BYTES) {
       // Would be dropped by the server anyway; CBR output never gets here.

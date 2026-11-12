@@ -382,7 +382,9 @@ export class Player extends EventEmitter {
       for (const line of lines) {
         const m = line.match(/^out_time_us=(\d+)/);
         if (!m || session !== this.#session) continue;
-        const position = startAt + Number(m[1]) / 1e6;
+        // With Opus output ffmpeg runs ahead of what has been heard (pipe and frame buffer),
+        // so the position comes from the frames actually sent instead.
+        const position = procs.stream ? startAt + procs.stream.playedSeconds : startAt + Number(m[1]) / 1e6;
         if (position > (track.position ?? 0) || !procs.started) {
           if (Number(m[1]) > 0) procs.lastProgressAt = Date.now();
           track.position = position;
@@ -396,6 +398,14 @@ export class Player extends EventEmitter {
       if (session !== this.#session) return;
       const now = Date.now();
       const ceiling = this.#maxPosition(track);
+      if (procs.stream && procs.started && !this.paused) {
+        // ffmpeg reports progress only while it can write; the frames keep going meanwhile.
+        const position = startAt + procs.stream.playedSeconds;
+        if (position > track.position) {
+          track.position = position;
+          procs.lastProgressAt = now;
+        }
+      }
       if (this.paused) {
         procs.lastProgressAt = now;
       } else if (procs.started && track.position > ceiling) {
@@ -424,7 +434,10 @@ export class Player extends EventEmitter {
       if (yt && isRunning(yt)) killProcessGroup(yt);
       const ytCode = await ytClosed;
       // ffmpeg is done encoding, but the last second is still being sent.
-      if (procs.stream && session === this.#session) await procs.stream.drained;
+      if (procs.stream && session === this.#session) {
+        await procs.stream.drained;
+        if (procs.started) track.position = startAt + procs.stream.playedSeconds;
+      }
       clearInterval(procs.watch);
       if (session !== this.#session) return; // killed on purpose (skip/stop)
       this.#procs = null;
