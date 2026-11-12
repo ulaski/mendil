@@ -1,1 +1,8 @@
 blank_issues_enabled: true
+contact_links:
+  - name: Question or help with setup
+    url: https://github.com/ulaski/mendil/discussions/categories/q-a
+    about: Ask in Discussions. Others with the same question will find the answer there.
+  - name: Security problem
+    url: https://github.com/ulaski/mendil/security/advisories/new
+    about: Please report vulnerabilities privately, not as an issue.

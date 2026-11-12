@@ -1,0 +1,38 @@
+name: Feature request
+description: An idea for something Mendil should do
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks! Check the [open issues](https://github.com/ulaski/mendil/issues) first. If someone asked already, a 👍 on that issue helps more than a new one.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What do you want to do?
+      description: Describe the situation on your server, not the solution yet. "People keep queueing 1-hour videos" is more useful than "add a duration limit".
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How could Mendil help?
+      description: Your idea, e.g. a command, a setting or a behaviour. Rough is fine.
+  - type: textarea
+    id: today
+    attributes:
+      label: What do you do today instead?
+      description: A workaround, another bot, or nothing.
+  - type: dropdown
+    id: server
+    attributes:
+      label: Your TeamSpeak server
+      options:
+        - TeamSpeak 3
+        - TeamSpeak 6
+        - Both / not sure
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Contributing
+      options:
+        - label: I'd like to help build this
