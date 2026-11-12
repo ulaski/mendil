@@ -34,10 +34,27 @@ In Türkiye, people at a *gazino* or *meyhane* used to write their song request 
 - 🌍 Speaks English and Turkish. [Adding a language](CONTRIBUTING.md#adding-a-language) means translating one file.
 - 🩺 Tells you when a channel setting makes music sound bad or keeps it from being heard, and explains YouTube blocks
 - 🔐 Can be limited to certain people, by TeamSpeak unique ID or server group
+- 🧪 Comes with two voice engines: the official TeamSpeak client, or an experimental native engine that also runs on ARM and plays music in any channel
 
 ## How it works
 
-ServerQuery can't send audio, so a bot has to connect to TeamSpeak as a real client. Mendil runs the official TeamSpeak 3 Linux client without a screen and controls it remotely:
+ServerQuery can't send audio, so a bot has to connect to TeamSpeak as a real client. Mendil can do that in two ways:
+
+| | Classic (default) | Native (experimental) |
+|---|---|---|
+| How | Runs the official TeamSpeak 3 client without a screen and controls it | Speaks the TeamSpeak protocol itself, through the open-source [teamspeak-js](https://github.com/HoneyBBQ/teamspeak-js) library |
+| Image | `ghcr.io/ulaski/mendil:latest` | `ghcr.io/ulaski/mendil:native` |
+| CPU | x86_64 only (ARM via slow emulation) | x86_64 and ARM64 (e.g. Raspberry Pi) |
+| Memory | about 300 MB | about 80 MB |
+| Channel codec | needs Opus Music for good sound | plays in stereo in any channel |
+| Why a connection was refused | not reported by the client | logged (wrong password, ban, security level…) |
+| TeamSpeak 6 servers | works (TS3 client on a TS6 server) | works |
+
+Classic is the safe choice: it is TeamSpeak's own client. Native is newer and lighter. It is not made or endorsed by TeamSpeak, and the library behind it is young, so treat it as experimental. You switch with one setting, `VOICE_BACKEND`, and can switch back any time.
+
+### Classic
+
+Mendil runs the official TeamSpeak 3 Linux client without a screen and controls it remotely:
 
 ```
 TeamSpeak chat ──► TS3 client ◄── ClientQuery (127.0.0.1:25639) ──► Node.js controller
@@ -52,13 +69,16 @@ TeamSpeak chat ──► TS3 client ◄── ClientQuery (127.0.0.1:25639) ─�
 - The controller reads chat through the client's ClientQuery plugin, answers there, and only transmits while music is playing.
 - Mendil fills in the license dialog, the intro wizard and the audio settings before the client first starts, so nobody has to click through the client's windows.
 
+### Native
+
+Mendil connects to the server itself. ffmpeg encodes the music as Opus (the codec TeamSpeak uses), and Mendil sends it as voice packets, 50 per second. There is no TeamSpeak client, X server or sound card involved, which is why it is lighter and runs on any CPU. It keeps its own identity in the data volume, separate from Classic's, so a server group you gave the Classic bot has to be given again after switching.
+
 ## Requirements
 
 - A TeamSpeak 3 or TeamSpeak 6 server. Tested with TS3 server 3.13.9 and TS6 server 6.0.0-beta13.1.
 - Docker with Docker Compose
-- An x86_64 (amd64) host, because the official TS3 client only exists for x86_64. ARM machines such as a Raspberry Pi or a Mac with Apple Silicon can run it under emulation, but slowly.
-- About 300 MB of RAM per bot
-- Internet access on first start, to download the TeamSpeak client
+- For Classic: an x86_64 (amd64) host, because the official TS3 client only exists for x86_64. ARM machines such as a Raspberry Pi or a Mac with Apple Silicon can run it under emulation, but slowly. About 300 MB of RAM per bot, and internet access on first start to download the TeamSpeak client.
+- For Native: any x86_64 or ARM64 host and about 100 MB of RAM per bot.
 
 ## Quick start
 
@@ -114,7 +134,27 @@ docker compose up -d --build
 ```
 </details>
 
-> **Note:** the prebuilt image `ghcr.io/ulaski/mendil` is published with the first release. Until then, use "From source".
+<details>
+<summary>With the native engine</summary>
+
+In `docker-compose.yml`, use the native image and drop what only Classic needs:
+
+```yaml
+services:
+  mendil:
+    image: ghcr.io/ulaski/mendil:native
+    container_name: mendil
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ts3client-data:/home/node/.ts3client
+
+volumes:
+  ts3client-data:
+```
+
+`TS3CLIENT_LICENSE` isn't needed, because no TeamSpeak client is downloaded. Everything else in `.env` stays the same. From source, build it with `docker build --target native .`.
+</details>
 
 ### Where is your TeamSpeak server?
 
@@ -190,6 +230,8 @@ All settings are environment variables, usually set in `.env`.
 | `YTDLP_COOKIES_FILE` | | Cookies file for YouTube, see [docs/youtube.md](docs/youtube.md) |
 | `YTDLP_PROXY` | | Proxy for YouTube traffic only, e.g. `socks5://user:pass@host:1080` |
 | `ALLOW_PRIVATE_URLS` | `false` | Let `!play` open addresses on private networks (LAN, localhost), e.g. a media server at home. Off by default, see [SECURITY.md](SECURITY.md). |
+| `VOICE_BACKEND` | `classic` | `classic` (official TeamSpeak client) or `native`, see [How it works](#how-it-works). The `native` image sets it for you. |
+| `NATIVE_BITRATE` | `128` | Native engine only: Opus bitrate in kbit/s, 48 to 192 |
 | `TS3_CLIENT_VERSION` | `3.6.2` | TeamSpeak client version to download |
 | `TS3_CLIENT_SHA256` | | Expected SHA-256 of that download. Known for 3.6.2; set it if you change the version. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
@@ -239,17 +281,17 @@ Every 10 minutes the log has a `stats:` line with CPU and memory per process and
 
 ## FAQ
 
-**Why a full TeamSpeak client instead of a lightweight protocol library?**
-The official client speaks exactly what servers expect, which made it the most reliable way to start. It costs some memory and only runs on x86_64. A lighter engine based on an open-source protocol implementation is on the roadmap, and it would also bring ARM support and a desktop app.
+**Classic or Native?**
+Classic runs TeamSpeak's own client, which has spoken exactly what servers expect for years. Native is lighter, runs on ARM and doesn't care about the channel codec, but it uses an independent implementation of the TeamSpeak protocol that is younger and not endorsed by TeamSpeak. If Classic works for you, keep it. If you're on a Raspberry Pi, short on memory, or can't change the channel codec, try Native.
 
 **Can I run several bots?**
 Yes. Run one container per bot, each with its own volumes and nickname. Use a separate compose project (`docker compose -p mendil2 …`) or directory for each.
 
 **Does it work with TeamSpeak 6 servers?**
-Yes. Mendil connects to TS6 servers the way any TeamSpeak 3 client does. Tested with TS6 server 6.0.0-beta13.1: commands, announcements and audio all work.
+Yes, with both engines. Tested with TS6 server 6.0.0-beta13.1: commands, announcements and audio all work, and CI tests the native engine against TS3 and TS6 servers on every change.
 
 **TeamSpeak 3 reaches end-of-life at the end of 2027. What happens then?**
-TeamSpeak has announced that TS3 reaches end-of-life at the end of 2027, but hasn't said what that means for TS3 clients on TS6 servers. Native TS6 support is on Mendil's roadmap so that it keeps working either way.
+TeamSpeak has announced that TS3 reaches end-of-life at the end of 2027, but hasn't said what that means for TS3 clients on TS6 servers. If the TS3 client stops working with TS6 servers, the native engine doesn't depend on it.
 
 **Spotify / SoundCloud?**
 yt-dlp supports SoundCloud and many other sites, and direct links usually work. Spotify doesn't serve audio to third parties.
@@ -260,17 +302,22 @@ By default everyone who can write to it, and `!play` takes links to any site yt-
 ## Development
 
 ```bash
-npm test     # unit tests (Node.js 22+, no Docker needed)
+npm ci       # the native engine's one dependency
+npm test     # unit tests (Node.js 22.12+, no Docker needed)
+TS_HOST=127.0.0.1 TS_PORT=9987 node test/e2e/native-e2e.mjs   # against a running TS3/TS6 server
 ```
 
-The controller uses only the Node.js standard library and has no npm dependencies.
+The Classic engine and the rest of the controller use only the Node.js standard library. The native engine uses one dependency, [teamspeak-js](https://github.com/HoneyBBQ/teamspeak-js) (MIT), pinned to an exact version.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the end-to-end setup.
 
 ```
 docker/entrypoint.sh        downloads the TS3 client, starts Xvfb + PulseAudio, runs the bot
 src/index.js                entry point, signal handling
-src/bot.js                  connection management, watchdog, health, chat → commands
+src/bot.js                  chat → commands, access control, health, watchdog (engine-agnostic)
+src/voice/classic.js        Classic engine: TS3 client process, ClientQuery, reconnects
+src/voice/native.js         Native engine: teamspeak-js connection, reconnects, identity
+src/voice/opus.js           Ogg/Opus demuxer and the 20 ms frame pacer (Native)
 src/reconnect.js            reconnect policy (backoff, kicks, bans), unit-tested with a fake clock
 src/commands.js             chat commands
 src/player.js               queue and playback (file or yt-dlp stream → ffmpeg → PulseAudio)
@@ -288,6 +335,8 @@ src/ts3/protocol.js         TS3 query escaping/parsing
 ## Legal
 
 This project is not affiliated with or endorsed by TeamSpeak Systems GmbH. *TeamSpeak* is their trademark.
+
+The native engine uses [teamspeak-js](https://github.com/HoneyBBQ/teamspeak-js), an independent, open-source implementation of the TeamSpeak protocol that contains no TeamSpeak code. It is not made or endorsed by TeamSpeak either. Check that third-party clients are fine with the servers you connect to.
 
 The TeamSpeak client is proprietary and is **not** included in this repository or its Docker image. It is downloaded from TeamSpeak's servers when the container first starts, and only after you set `TS3CLIENT_LICENSE=accept`. Doing so means you accept [TeamSpeak's license terms](https://www.teamspeak.com/en/privacy-and-terms/).
 

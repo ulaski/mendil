@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- **Native engine (experimental):** `VOICE_BACKEND=native` connects to TeamSpeak without the official client, through [teamspeak-js](https://github.com/HoneyBBQ/teamspeak-js). It runs on x86_64 and ARM64 (`ghcr.io/ulaski/mendil:native`), uses about a quarter of the memory, plays music in stereo in any channel (no Opus Music codec needed), and logs why a server refused it (wrong password, ban, security level). It raises its identity's security level when a server asks for more. Classic stays the default.
+- `NATIVE_BITRATE` sets the native engine's Opus bitrate.
+- CI tests the native engine end to end against TeamSpeak 3 and TeamSpeak 6 servers.
+
+### Changed
+- The controller is split into an engine-agnostic bot and two voice engines (`src/voice/`). Classic behaves as before.
+
 ## [0.1.1] - 2026-11-13
 
 Security release. Everyone running 0.1.0 should update.
