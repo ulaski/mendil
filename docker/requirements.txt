@@ -1,0 +1,4 @@
+# yt-dlp, installed into /opt/yt-dlp (a Python venv) by the Dockerfile.
+# Pinned for reproducible images; Dependabot proposes updates, and the bot also
+# updates it at runtime (src/ytdlp-update.js).
+yt-dlp[default]==2026.10.26

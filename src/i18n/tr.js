@@ -10,6 +10,7 @@ export default {
   shuttingDown: 'Bot kapanıyor',
   nothingPlaying: 'Şu an bir şey çalmıyor.',
   pickRange: '1 ile {max} arasında bir numara gir.',
+  busy: 'Şu an çok fazla istek var — birazdan tekrar dene.',
 
   usagePlay: 'Kullanım: {prefix}play <YouTube linki veya arama>',
   queueFull: 'Kuyruk dolu (en fazla {max} şarkı).',

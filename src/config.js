@@ -37,7 +37,12 @@ export function loadConfig() {
     throw new Error('TS3_HOST is not set. Copy .env.example to .env and fill in your server address.');
   }
 
+  const configDir = env.TS3_CONFIG_DIR || path.join(os.homedir(), '.ts3client');
+  // Mendil's own persistent files live on the same volume as the TS3 identity.
+  const dataDir = env.MENDIL_DATA_DIR || path.join(configDir, 'mendil');
+
   return {
+    dataDir,
     ts3: {
       host,
       port,
@@ -46,7 +51,7 @@ export function loadConfig() {
       channel: env.TS3_CHANNEL || '',
       channelPassword: env.TS3_CHANNEL_PASSWORD || '',
       clientDir: env.TS3_CLIENT_DIR || '/opt/ts3client',
-      configDir: env.TS3_CONFIG_DIR || path.join(os.homedir(), '.ts3client'),
+      configDir,
       queryPort: int(env.TS3_CLIENTQUERY_PORT, 25639),
     },
     bot: {
@@ -63,6 +68,14 @@ export function loadConfig() {
       maxPlaylistItems: int(env.MAX_PLAYLIST_ITEMS, 50, { min: 1 }),
       maxTrackDuration: int(env.MAX_TRACK_DURATION, 0, { min: 0 }),
       cookiesFile: env.YTDLP_COOKIES_FILE || '',
+      cacheDir: path.join(dataDir, 'yt-dlp-cache'), // player JS etc.; speeds up extraction
+      prefetch: bool(env.PREFETCH, true),
+      prefetchDir: env.PREFETCH_DIR || '/tmp/mendil-cache',
+      prefetchMaxDuration: int(env.PREFETCH_MAX_DURATION, 30 * 60, { min: 0 }),
+    },
+    ytdlp: {
+      autoUpdate: bool(env.YTDLP_AUTO_UPDATE, true),
+      venv: env.YTDLP_VENV || '/opt/yt-dlp',
     },
   };
 }

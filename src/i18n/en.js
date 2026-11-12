@@ -13,6 +13,7 @@ export default {
   shuttingDown: 'Bot is shutting down',
   nothingPlaying: 'Nothing is playing right now.',
   pickRange: 'Enter a number between 1 and {max}.',
+  busy: "I'm handling a lot of requests right now — try again in a moment.",
 
   // play / queue
   usagePlay: 'Usage: {prefix}play <YouTube link or search terms>',

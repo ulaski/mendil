@@ -24,8 +24,11 @@ export function createCommands(bot) {
 
     let result;
     try {
+      const started = Date.now();
       result = await resolveTracks(input, config.player);
+      bot.recordResolve?.(Date.now() - started);
     } catch (err) {
+      if (err.busy) return ctx.reply(t('busy'));
       return ctx.reply(t('notFound', { reason: safe(err.message) }));
     }
     return addTracks(ctx, result.tracks, { front, playlistTitle: result.playlistTitle });
@@ -80,8 +83,9 @@ export function createCommands(bot) {
         if (!arg) return ctx.reply(t('usageSearch'));
         let results;
         try {
-          results = await searchTracks(arg, { count: 5, cookiesFile: config.player.cookiesFile });
+          results = await searchTracks(arg, { ...config.player, count: 5 });
         } catch (err) {
+          if (err.busy) return ctx.reply(t('busy'));
           return ctx.reply(t('searchFailed', { reason: safe(err.message) }));
         }
         if (results.length === 0) return ctx.reply(t('noResults'));
@@ -176,15 +180,14 @@ export function createCommands(bot) {
         if (player.queue.length === 0) return ctx.reply(t('queueEmpty'));
         const n = parseIndex(arg, player.queue.length);
         if (!n) return ctx.reply(t('pickRange', { max: player.queue.length }));
-        const [removed] = player.queue.splice(n - 1, 1);
+        const removed = player.remove(n);
         return ctx.reply(t('removed', { title: safe(removed.title) }));
       },
     },
     {
       names: ['clear'],
       run: (ctx) => {
-        const count = player.queue.length;
-        player.queue = [];
+        const count = player.clear();
         return ctx.reply(t('cleared', { count }));
       },
     },
