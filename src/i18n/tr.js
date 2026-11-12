@@ -2,6 +2,7 @@
 export default {
   nowPlaying: '▶ Çalıyor: {track} ({length}) — isteyen: {user}',
   playFailed: 'Çalınamadı: {title} — {reason}',
+  youtubeBlocked: 'YouTube bu sunucudan gelen istekleri reddediyor (veri merkezi IP\'lerini sık sık engeller). Kuyruk korunuyor. Çözüm: [url]{url}[/url] — sonra {prefix}resume.',
   playbackHalted: 'Şarkılar art arda çalınamadığı için çalma durduruldu: {reason}. Kuyruk korunuyor — tekrar denemek için {prefix}resume.',
   live: 'canlı',
 
@@ -47,6 +48,12 @@ export default {
   loopSet: 'Tekrar: {mode}',
   loopModes: { off: 'kapalı', one: 'şarkı', all: 'liste' },
 
+  hintCodec: 'Bilginize: bu kanal {codec} (kalite {quality}) kullanıyor, müzik kötü duyulur. Bir yönetici kanalı Opus Music, kalite 10 yapabilir (Kanalı Düzenle → Ses).',
+  hintQuality: 'Bilginize: bu kanalın ses kalitesi {quality}. Müzik için bir yönetici bunu 10 yapabilir (Kanalı Düzenle → Ses).',
+  hintTalkPower: 'Bilginize: bu kanalda beni kimse duyamıyor. Kanal {needed} konuşma gücü istiyor, bende {have} var. Bir yönetici bana konuşma gücü verebilir ya da konuşmacı yapabilir.',
+
+  whoami: '{name}: benzersiz kimliğin [b]{uid}[/b], sunucu grupların: {groups}. Yöneticiler bunları ALLOWED_UIDS / ALLOWED_GROUPS ayarına yazabilir.',
+
   volume: 'Ses: {volume}%',
   volumeRange: '0 ile 100 arasında bir değer gir.',
   joined: 'Geldim!',
@@ -71,6 +78,7 @@ export default {
     loop: 'Tekrar modu: kapalı / şarkı / liste',
     vol: 'Ses seviyesini gösterir / ayarlar',
     join: 'Botu bulunduğun kanala çeker',
+    whoami: 'Benzersiz kimliğini ve sunucu gruplarını gösterir (yetki ayarı için)',
     help: 'Bu liste',
   },
   usage: {
@@ -100,6 +108,7 @@ export default {
     loop: ['tekrar'],
     vol: ['ses'],
     join: ['gel'],
+    whoami: ['kimim', 'ben'],
     help: ['yardim', 'yardım', 'komutlar'],
   },
   loopAliases: {

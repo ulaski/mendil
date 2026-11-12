@@ -14,6 +14,7 @@ import { YtdlpUpdater } from './ytdlp-update.js';
 import { createCommands } from './commands.js';
 import { createI18n } from './i18n/index.js';
 import { chunkMessage, formatDuration, safe, stripBBCode, trackLink } from './format.js';
+import { isYoutubeBlock, YOUTUBE_DOCS_URL } from './ytdlp.js';
 
 const WATCHDOG_INTERVAL_MS = 10_000;
 const QUERY_STARTUP_GRACE_MS = 90_000; // restart the client if ClientQuery never comes up
@@ -32,6 +33,13 @@ const CLIENT_MAX_CRASHES = 5;
 
 // Minimum gap between outgoing chat messages, to stay clear of the server's anti-flood.
 const MESSAGE_GAP_MS = 300;
+
+// TeamSpeak codec ids (channel_codec) and the error id for "client is flooding".
+const CODECS = { 0: 'Speex Narrowband', 1: 'Speex Wideband', 2: 'Speex Ultra-Wideband', 3: 'CELT Mono', 4: 'Opus Voice', 5: 'Opus Music' };
+const CODEC_OPUS_MUSIC = '5';
+const MIN_MUSIC_QUALITY = 7;
+const ERR_FLOODING = 524;
+const GROUP_CACHE_MS = 60_000;
 
 // notifyclientleftview reasons for our own client
 const REASON_KICKED = '5';
@@ -80,6 +88,11 @@ export class Bot {
   #sendQueue = Promise.resolve();
   #resolveTimes = [];
   #policy = new ReconnectPolicy();
+  #refusalLogged = false; // explain a refused connection once per failure streak
+  #hinted = new Set(); // channel hints already posted ("<cid>:<issue>")
+  #diagnosing = new Map(); // cid -> running check (a move triggers it twice)
+  #floodWarned = false;
+  #groupCache = new Map(); // clid -> { uid, groups, at }
   #stats = new StatsReporter();
 
   constructor(config, log) {
@@ -92,14 +105,14 @@ export class Bot {
     this.client = new Ts3ClientProcess({ ...config.ts3, log: log.child('ts3client') });
     const p = config.player;
     const prefetcher = p.prefetch
-      ? new Prefetcher({ dir: p.prefetchDir, cookiesFile: p.cookiesFile, cacheDir: p.cacheDir, maxDuration: p.prefetchMaxDuration, normalize: p.normalize, log: log.child('prefetch') })
+      ? new Prefetcher({ dir: p.prefetchDir, cookiesFile: p.cookiesFile, cacheDir: p.cacheDir, proxy: p.proxy, maxDuration: p.prefetchMaxDuration, normalize: p.normalize, log: log.child('prefetch') })
       : null;
     this.player = new Player({ ...p, prefetcher, log: log.child('player') });
     this.state = new StateStore(path.join(config.dataDir, 'state.json'), log.child('state'));
     this.updater = new YtdlpUpdater({
       enabled: config.ytdlp.autoUpdate,
       venv: config.ytdlp.venv,
-      ytOpts: { cookiesFile: p.cookiesFile, cacheDir: p.cacheDir },
+      ytOpts: { cookiesFile: p.cookiesFile, cacheDir: p.cacheDir, proxy: p.proxy },
       smokeTestUrl: () => this.player.lastGoodUrl,
       log: log.child('yt-dlp'),
     });
@@ -117,7 +130,9 @@ export class Bot {
       this.sendChannel(t('playFailed', { title: safe(track.title), reason: safe(message) }));
     });
     this.player.on('halted', (track, message) => {
-      this.sendChannel(t('playbackHalted', { reason: safe(message) }));
+      const blocked = isYoutubeBlock(message);
+      if (blocked) this.log.warn(`YouTube is blocking this server; see ${YOUTUBE_DOCS_URL}`);
+      this.sendChannel(blocked ? t('youtubeBlocked', { url: YOUTUBE_DOCS_URL }) : t('playbackHalted', { reason: safe(message) }));
     });
     this.player.on('idle', () => this.setTransmitting(false));
   }
@@ -125,6 +140,7 @@ export class Bot {
   async start() {
     await this.client.prepare();
     const saved = this.state.load();
+    if (Array.isArray(saved?.hinted)) this.#hinted = new Set(saved.hinted); // don't repeat hints after a restart
     if (saved) {
       this.#restored = this.player.restore(saved);
       if (this.#restored.tracks > 0) {
@@ -170,6 +186,7 @@ export class Bot {
   #saveState() {
     const snapshot = this.player.snapshot();
     if (this.#restored?.paused) snapshot.paused = true; // restored but not started yet
+    snapshot.hinted = [...this.#hinted];
     this.state.save(snapshot);
   }
 
@@ -377,7 +394,9 @@ export class Bot {
         this.#status = 'connection_established';
         this.#transmitting = null; // unknown after a (re)connect
         this.#setupDone = true;
+        this.#refusalLogged = false;
         this.log.info(`connected to server (clid=${me.clid}, cid=${me.cid})`);
+        this.#diagnoseChannel(me.cid);
 
         if (this.#pausedByDisconnect) {
           this.#pausedByDisconnect = false;
@@ -416,10 +435,12 @@ export class Bot {
     this.#policy.onDisconnected(Date.now(), leaving ?? {});
     const error = params.error && params.error !== '0' ? ` (error ${params.error})` : '';
     this.log.warn(`disconnected from server${error}`);
-    if (!leaving && prev !== 'connection_established') {
-      // TS3 servers reject a wrong/missing password without an error code or a log line.
-      this.log.warn('the server refused the connection. If this keeps happening, check TS3_SERVER_PASSWORD, ' +
-        'whether the bot is banned and whether the server is full.');
+    if (!leaving && prev !== 'connection_established' && !this.#refusalLogged) {
+      // The TS3 client reports every refusal the same way (error 0, no reason anywhere).
+      this.#refusalLogged = true;
+      this.log.warn('the server refused the connection (TeamSpeak does not say why). Common causes: ' +
+        'a wrong or missing TS3_SERVER_PASSWORD; the bot\'s identity, IP or nickname is banned; the server is full; ' +
+        'or the server requires an identity security level above 8. Mendil keeps retrying.');
     }
     this.#driveReconnect();
   }
@@ -537,7 +558,62 @@ export class Bot {
     if (!target) throw new Error(this.i18n.t('clientNotFound'));
     if (target.cid === this.me.cid) return;
     await this.#cq.send('clientmove', { cid: target.cid, clid: this.me.clid });
-    this.me.cid = target.cid;
+    this.me.cid = target.cid; // the move notification runs the channel check
+  }
+
+  /** Unique id and server group ids of a client (cached briefly). */
+  async clientInfo(clid) {
+    const cached = this.#groupCache.get(clid);
+    if (cached && Date.now() - cached.at < GROUP_CACHE_MS) return cached;
+    const [c] = await this.#cq.send('clientvariable', { clid }, [], ['client_unique_identifier', 'client_servergroups', 'client_nickname']);
+    const info = {
+      uid: c.client_unique_identifier,
+      name: c.client_nickname,
+      groups: (c.client_servergroups ?? '').split(',').filter(Boolean),
+      at: Date.now(),
+    };
+    this.#groupCache.set(clid, info);
+    return info;
+  }
+
+  /**
+   * Checks the channel for settings that make the bot sound bad or inaudible and says so
+   * (once per channel and issue), so admins don't have to guess.
+   */
+  #diagnoseChannel(cid) {
+    if (!cid || !this.#cq?.connected) return Promise.resolve();
+    if (!this.#diagnosing.has(cid)) {
+      this.#diagnosing.set(cid, this.#checkChannel(cid).finally(() => this.#diagnosing.delete(cid)));
+    }
+    return this.#diagnosing.get(cid);
+  }
+
+  async #checkChannel(cid) {
+    const { t } = this.i18n;
+    try {
+      const [ch] = await this.#cq.send('channelvariable', { cid }, [], ['channel_codec', 'channel_codec_quality', 'channel_needed_talk_power']);
+      const [me] = await this.#cq.send('clientvariable', { clid: this.me.clid }, [], ['client_talk_power', 'client_is_talker']);
+      const issues = [];
+      const quality = Number(ch.channel_codec_quality);
+      if (ch.channel_codec !== CODEC_OPUS_MUSIC) {
+        issues.push(['codec', t('hintCodec', { codec: CODECS[ch.channel_codec] ?? `codec ${ch.channel_codec}`, quality })]);
+      } else if (quality < MIN_MUSIC_QUALITY) {
+        issues.push(['quality', t('hintQuality', { quality })]);
+      }
+      const needed = Number(ch.channel_needed_talk_power || 0);
+      const have = Number(me.client_talk_power || 0);
+      if (needed > have && me.client_is_talker !== '1') issues.push(['talk', t('hintTalkPower', { needed, have })]);
+
+      for (const [issue, message] of issues) {
+        this.log.warn(`channel ${cid}: ${message}`);
+        const key = `${cid}:${issue}`;
+        if (!this.config.bot.channelHints || this.#hinted.has(key)) continue;
+        this.#hinted.add(key);
+        this.sendChannel(`🧻 ${message}`);
+      }
+    } catch (err) {
+      this.log.debug(`channel check failed: ${err.message}`);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -565,6 +641,7 @@ export class Bot {
     }
     if (name === 'notifyclientmoved' && params.clid === this.me.clid) {
       this.me.cid = params.ctid;
+      this.#diagnoseChannel(params.ctid);
       return;
     }
     if (name === 'notifytextmessage') {
@@ -595,13 +672,29 @@ export class Bot {
       invokerUid: invokeruid,
       reply: (msg) => this.#reply(targetmode, invokerid, msg),
     };
-    if (allowedUids.length > 0 && !allowedUids.includes(invokeruid) && command.names[0] !== 'help') {
+    if (!['help', 'whoami'].includes(command.names[0]) && !(await this.#isAllowed(invokerid, invokeruid))) {
+      this.log.info(`denied ${invokername} (${invokeruid}): ${prefix}${rawName}`);
       await ctx.reply(this.i18n.t('notAllowed'));
       return;
     }
 
     this.log.info(`${invokername}: ${prefix}${rawName} ${rest.join(' ')}`.trim());
     await command.run(ctx, rest.join(' ').trim());
+  }
+
+  /** ALLOWED_UIDS / ALLOWED_GROUPS; both empty means everyone may use the bot. */
+  async #isAllowed(clid, uid) {
+    const { allowedUids, allowedGroups } = this.config.bot;
+    if (allowedUids.length === 0 && allowedGroups.length === 0) return true;
+    if (allowedUids.includes(uid)) return true;
+    if (allowedGroups.length === 0) return false;
+    try {
+      const { groups } = await this.clientInfo(clid);
+      return groups.some((g) => allowedGroups.includes(g));
+    } catch (err) {
+      this.log.warn(`could not look up server groups of client ${clid}: ${err.message}`);
+      return false;
+    }
   }
 
   async #reply(targetmode, invokerId, text) {
@@ -621,7 +714,16 @@ export class Bot {
         try {
           await this.#cq.send('sendtextmessage', { ...target, msg: chunk });
         } catch (err) {
-          this.log.warn('could not send message:', err.message);
+          if (err.id === ERR_FLOODING || /flood/i.test(err.queryMessage ?? '')) {
+            if (!this.#floodWarned) {
+              this.#floodWarned = true;
+              this.log.warn("the server's anti-flood is blocking Mendil's messages. Give the bot's server group the " +
+                'permission b_client_ignore_antiflood, or raise the server\'s anti-flood limits.');
+            }
+            await sleep(3_000);
+          } else {
+            this.log.warn('could not send message:', err.message);
+          }
           return;
         }
         await sleep(MESSAGE_GAP_MS);

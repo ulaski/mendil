@@ -43,13 +43,17 @@ export function parseRows(line) {
   return line.split('|').map(parseParams);
 }
 
-/** Builds "cmd key=value ... -flag". Undefined/null/empty-string params are omitted. */
-export function buildCommand(name, params = {}, flags = []) {
+/**
+ * Builds "cmd key=value ... -flag prop". Undefined/null/empty-string params are omitted;
+ * `props` are bare property names (e.g. for clientvariable/channelvariable).
+ */
+export function buildCommand(name, params = {}, flags = [], props = []) {
   const parts = [name];
   for (const [key, value] of Object.entries(params)) {
     if (value === undefined || value === null || value === '') continue;
     parts.push(`${key}=${escape(value)}`);
   }
   for (const flag of flags) parts.push(flag.startsWith('-') ? flag : `-${flag}`);
+  for (const prop of props) parts.push(prop);
   return parts.join(' ');
 }

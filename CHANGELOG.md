@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Added
+- Works with **TeamSpeak 6** servers (tested with 6.0.0-beta13.1) as well as TeamSpeak 3.
+- Channel self-check: when Mendil joins a channel whose codec or talk power is wrong for music, it posts a short hint (once per channel; `CHANNEL_HINTS=false` disables it).
+- `!whoami` shows your unique ID and server groups; `ALLOWED_GROUPS` restricts the bot to server groups.
+- YouTube blocks are recognised: Mendil explains them in chat and links to the new [docs/youtube.md](docs/youtube.md). `YTDLP_PROXY` routes YouTube traffic through a proxy.
+- Quick start without cloning the repo, and a single `docker run` alternative.
 - Tracks are downloaded before they play, and the next track while the current one plays. The gap between songs dropped from seconds to about 0.2 s, and network hiccups mid-song no longer matter. Live streams and tracks over 30 minutes (`PREFETCH_MAX_DURATION`) are still streamed; `PREFETCH=false` streams everything.
 - The queue, current position, loop mode and volume are saved, and restored after a restart, crash or update. Playback resumes a few seconds before where it stopped.
 - Kicks and bans are recognised: Mendil waits 45 s after a kick and waits out a ban before reconnecting.
@@ -14,6 +19,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 
 ### Fixed
+- The suggested cookies mount was read-only, which makes yt-dlp crash; it must be writable.
+- A refused connection is explained once per failure streak (with the likely causes) instead of on every retry; anti-flood blocks of Mendil's messages are reported with the permission that fixes them.
 - Skipping or stopping a track no longer leaves a yt-dlp process and an ~85 MB temp directory behind. yt-dlp now runs in its own process group, which is stopped as a whole.
 - A chat command could run twice when a watchdog run overlapped the next one. Stale ClientQuery connections are now closed and ignored.
 - The container stayed up but silent when Xvfb or PulseAudio died. The bot now exits within one watchdog tick so Docker restarts it.

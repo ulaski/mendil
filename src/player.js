@@ -92,12 +92,12 @@ export class Player extends EventEmitter {
   #failures = 0;
   #lastEndAt = 0;
 
-  constructor({ sink, defaultVolume, normalize, cookiesFile, cacheDir, prefetcher = null, log, bin = {}, timing = {} }) {
+  constructor({ sink, defaultVolume, normalize, cookiesFile, cacheDir, proxy, prefetcher = null, log, bin = {}, timing = {} }) {
     super();
     this.sink = sink;
     this.volume = defaultVolume;
     this.normalize = normalize;
-    this.ytOpts = { cookiesFile, cacheDir };
+    this.ytOpts = { cookiesFile, cacheDir, proxy };
     this.prefetcher = prefetcher;
     this.log = log;
     this.bin = { ytdlp: 'yt-dlp', ffmpeg: 'ffmpeg', ...bin };

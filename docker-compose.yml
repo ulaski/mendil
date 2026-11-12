@@ -16,8 +16,9 @@ services:
     volumes:
       - ts3client-data:/home/node/.ts3client # identity + settings
       - ts3client-bin:/opt/ts3client # downloaded TeamSpeak client
-      # Optional YouTube cookies (see README), then set YTDLP_COOKIES_FILE=/cookies/cookies.txt
-      # - ./cookies:/cookies:ro
+      # Optional YouTube cookies (docs/youtube.md), then set YTDLP_COOKIES_FILE=/cookies/cookies.txt.
+      # Must be writable by uid 1000: yt-dlp saves refreshed cookies back to the file.
+      # - ./cookies:/cookies
 
 volumes:
   ts3client-data:

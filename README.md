@@ -8,7 +8,7 @@ Write a song in chat and Mendil plays it in your channel.
 
 [![CI](https://github.com/ulaski/mendil/actions/workflows/ci.yml/badge.svg)](https://github.com/ulaski/mendil/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
-[![TeamSpeak 3](https://img.shields.io/badge/TeamSpeak-3-2580c3.svg)](#requirements)
+[![TeamSpeak 3 & 6](https://img.shields.io/badge/TeamSpeak-3%20%26%206-2580c3.svg)](#requirements)
 
 </div>
 
@@ -30,7 +30,8 @@ In Turkey, people at a *gazino* or *meyhane* used to write their song request on
 - ⏭️ **No gaps between songs:** the next track is downloaded while the current one plays
 - 🩹 **Recovers on its own** from crashes, kicks, bans and server restarts, and **picks up where it left off** after a restart
 - 🌍 **Speaks your language:** English and Turkish built in, and [adding a language](CONTRIBUTING.md#adding-a-language) means translating one file
-- 🪶 **No npm dependencies:** the controller uses only the Node.js standard library
+- 🩺 **Tells you what's wrong:** points out channel settings that make music sound bad or inaudible, and explains YouTube blocks
+- 🔐 **Access control** by TeamSpeak unique ID or server group
 
 ## How it works
 
@@ -51,6 +52,7 @@ TeamSpeak chat ──► TS3 client ◄── ClientQuery (127.0.0.1:25639) ─�
 
 ## Requirements
 
+- A **TeamSpeak 3 or TeamSpeak 6** server. Tested with TS3 server 3.13.9 and TS6 server 6.0.0-beta13.1.
 - Docker with Docker Compose
 - An **x86_64 (amd64)** host. The official TS3 client only exists for x86_64. ARM machines (Raspberry Pi, Apple Silicon) can run it under emulation, but it's slow.
 - About 300 MB of RAM per bot
@@ -58,10 +60,12 @@ TeamSpeak chat ──► TS3 client ◄── ClientQuery (127.0.0.1:25639) ─�
 
 ## Quick start
 
+No need to clone the repo. Download the compose file and the example settings:
+
 ```bash
-git clone https://github.com/ulaski/mendil.git
-cd mendil
-cp .env.example .env
+mkdir mendil && cd mendil
+curl -fsSLO https://raw.githubusercontent.com/ulaski/mendil/main/docker-compose.yml
+curl -fsSL -o .env https://raw.githubusercontent.com/ulaski/mendil/main/.env.example
 ```
 
 Edit `.env` and set at least:
@@ -75,13 +79,40 @@ TS3_SERVER_PASSWORD=          # if your server has one
 Then start it:
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 docker compose logs -f
 ```
 
 The first start downloads the TeamSpeak client (~110 MB). Once you see `connected to server`, join Mendil's channel and type `!help`.
 
-> **Prebuilt image:** after a release is published you can skip `--build`. Run `docker compose pull`, which fetches `ghcr.io/ulaski/mendil`.
+<details>
+<summary>Without Compose: a single <code>docker run</code></summary>
+
+```bash
+docker run -d --name mendil --restart unless-stopped --shm-size 256m \
+  -e TS3CLIENT_LICENSE=accept \
+  -e TS3_HOST=ts.example.com \
+  -e TS3_SERVER_PASSWORD= \
+  -v mendil-data:/home/node/.ts3client \
+  -v mendil-client:/opt/ts3client \
+  ghcr.io/ulaski/mendil:latest
+```
+
+Add `--platform linux/amd64` on an ARM machine.
+</details>
+
+<details>
+<summary>From source</summary>
+
+```bash
+git clone https://github.com/ulaski/mendil.git
+cd mendil
+cp .env.example .env   # then edit it
+docker compose up -d --build
+```
+</details>
+
+> **Note:** the prebuilt image `ghcr.io/ulaski/mendil` is published with the first release. Until then, use "From source".
 
 ### Where is your TeamSpeak server?
 
@@ -96,6 +127,8 @@ The first start downloads the TeamSpeak client (~110 MB). Once you see `connecte
 
 - **Channel codec:** set Mendil's channel to **Opus Music** with quality **10** (*Edit Channel → Audio*). The default *Opus Voice* codec makes music sound bad.
 - **Talk power:** if the channel requires talk power, give Mendil's server group enough.
+
+Mendil checks both when it joins a channel and posts a short hint if something is off (once per channel; `CHANNEL_HINTS=false` turns that off).
 - **Anti-flood:** long queue listings send a few messages in a row. If Mendil gets flood-blocked, add it to a group with `b_client_ignore_antiflood`.
 - **Permanent server group:** Mendil keeps its identity across restarts (stored in the `ts3client-data` volume), so any server group you give it sticks.
 
@@ -119,7 +152,8 @@ Mendil reads its own channel's chat and private messages sent to it. In private 
 | `!shuffle` | | Shuffle the queue |
 | `!loop [off\|one\|all]` | `!repeat` | Loop nothing, the current track, or the whole queue |
 | `!vol [0-100]` | `!volume`, `!v` | Show or set the volume |
-| `!join` | `!come` | Move the bot to your channel |
+| `!join` | `!come` | Move the bot to your channel. From another channel, send it as a private message. |
+| `!whoami` | `!me`, `!id` | Show your unique ID and server groups, for `ALLOWED_UIDS` / `ALLOWED_GROUPS` |
 | `!help` | `!h`, `!commands` | List commands |
 
 With `BOT_LANGUAGE=tr`, Turkish aliases also work, e.g. `!çal`, `!geç`, `!ses`, `!gel`.
@@ -139,7 +173,9 @@ All settings are environment variables, usually set in `.env`.
 | `BOT_NICKNAME` | `Mendil` | Nickname |
 | `BOT_LANGUAGE` | `en` | Chat language: `en`, `tr` |
 | `COMMAND_PREFIX` | `!` | Command prefix |
-| `ALLOWED_UIDS` | | Comma-separated TS3 unique IDs allowed to control the bot. Empty means everyone. |
+| `ALLOWED_UIDS` | | Comma-separated TS3 unique IDs allowed to control the bot. `!whoami` shows yours. |
+| `ALLOWED_GROUPS` | | Comma-separated server group IDs allowed to control the bot. If both lists are empty, everyone can; `!help` and `!whoami` always work. |
+| `CHANNEL_HINTS` | `true` | Post a hint when the channel's codec or talk power is wrong for music |
 | `ANNOUNCE_TRACKS` | `true` | Post "Now playing" messages |
 | `DEFAULT_VOLUME` | `70` | Start-up volume, 0–100 |
 | `NORMALIZE_AUDIO` | `true` | Loudness-normalise tracks to -16 LUFS |
@@ -149,15 +185,16 @@ All settings are environment variables, usually set in `.env`.
 | `PREFETCH` | `true` | Download tracks before playing them (no gaps, robust against network hiccups). `false` streams everything. |
 | `PREFETCH_MAX_DURATION` | `1800` | Longer tracks (in seconds) and live streams are streamed instead of downloaded |
 | `YTDLP_AUTO_UPDATE` | `true` | Keep yt-dlp up to date in the background (daily, and when YouTube extraction breaks). A new version that fails a self-test is rolled back. |
-| `YTDLP_COOKIES_FILE` | | Cookies file for YouTube (see Troubleshooting) |
+| `YTDLP_COOKIES_FILE` | | Cookies file for YouTube, see [docs/youtube.md](docs/youtube.md) |
+| `YTDLP_PROXY` | | Proxy for YouTube traffic only, e.g. `socks5://user:pass@host:1080` |
 | `TS3_CLIENT_VERSION` | `3.6.2` | TeamSpeak client version to download |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
 
 ## Updating
 
 ```bash
-git pull
-docker compose up -d --build     # or: docker compose pull && docker compose up -d
+docker compose pull && docker compose up -d
+# from source: git pull && docker compose up -d --build
 ```
 
 yt-dlp also updates itself in the background, daily and whenever YouTube extraction starts failing, so most YouTube changes need no action.
@@ -167,18 +204,20 @@ The queue survives updates and restarts. It is stored with the bot's identity in
 ## Troubleshooting
 
 **Mendil doesn't connect / "the server refused the connection"**
-TeamSpeak rejects a wrong or missing server password without an error message. Check `TS3_SERVER_PASSWORD` first, then bans and max clients. Run with `LOG_LEVEL=debug` for more detail. The TeamSpeak client's own log is here:
+The TeamSpeak 3 client reports every refusal the same way, without a reason. The usual causes, most likely first:
+1. a wrong or missing `TS3_SERVER_PASSWORD`;
+2. a ban on the bot's identity, IP or nickname;
+3. the server is full;
+4. the server requires an identity security level above 8.
+
+If Mendil gets kicked or banned while connected, the log says so, with who did it. Run with `LOG_LEVEL=debug` for more detail. The TeamSpeak client's own log is here:
 `docker compose exec mendil sh -c 'tail -50 $(ls -t ~/.ts3client/logs/*.log | head -1)'`
 
 **Mendil joins but nobody hears anything**
-Check the channel codec (Opus Music), Mendil's talk power, and that it isn't muted by the server. `!np` shows whether something is actually playing.
+Check for a hint from Mendil in the channel chat (talk power, codec), and that it isn't muted by the server. `!np` shows whether something is actually playing.
 
 **"Sign in to confirm you're not a bot"**
-YouTube sometimes blocks data-center IPs. Fix it like this:
-1. Export a YouTube cookies file from a browser in Netscape format. Use a throwaway account.
-2. Put it in `./cookies/cookies.txt`.
-3. Uncomment the cookies volume in `docker-compose.yml`.
-4. Set `YTDLP_COOKIES_FILE=/cookies/cookies.txt`.
+YouTube sometimes blocks data-center IPs. Fix it with cookies from a throwaway YouTube account or with a proxy (`YTDLP_PROXY`). Step-by-step instructions are in **[docs/youtube.md](docs/youtube.md)**. Mendil links to that page in chat when it detects the block.
 
 **Music sounds bad**
 The channel codec is almost always the cause. Use Opus Music at quality 10.
@@ -195,13 +234,16 @@ Every 10 minutes the log has a `stats:` line with CPU and memory per process and
 ## FAQ
 
 **Why a full TeamSpeak client instead of a lightweight protocol library?**
-The TS3 voice protocol is proprietary and complex. The open-source re-implementations are mostly unmaintained. The official client always matches what servers expect, and this project hides the GUI parts.
+The official client is guaranteed to speak exactly what servers expect, and it's the most reliable way to get going. It costs some memory and only runs on x86_64. A lighter engine based on an open-source protocol implementation is on the roadmap. It would also bring ARM support and a desktop app.
 
 **Can I run several bots?**
 Yes. Run one container per bot, each with its own volumes and nickname. Use a separate compose project (`docker compose -p mendil2 …`) or directory for each.
 
-**Does it work with TeamSpeak 5/6 servers?**
-It's tested with TeamSpeak 3 servers. Newer servers that still accept TS3 clients should work.
+**Does it work with TeamSpeak 6 servers?**
+Yes. Mendil connects to TS6 servers the way any TeamSpeak 3 client does. Tested with TS6 server 6.0.0-beta13.1: commands, announcements and audio all work.
+
+**TeamSpeak 3 reaches end-of-life at the end of 2027. What happens then?**
+TeamSpeak has announced that TS3 reaches end-of-life at the end of 2027, but hasn't said what that means for TS3 clients on TS6 servers. Native TS6 support is on Mendil's roadmap so that it keeps working either way.
 
 **Spotify / SoundCloud?**
 yt-dlp supports SoundCloud and many other sites, and direct links usually work. Spotify doesn't serve audio to third parties.
@@ -211,6 +253,8 @@ yt-dlp supports SoundCloud and many other sites, and direct links usually work. 
 ```bash
 npm test     # unit tests (Node.js 22+, no Docker needed)
 ```
+
+The controller has no npm dependencies; it uses only the Node.js standard library.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the end-to-end setup.
 

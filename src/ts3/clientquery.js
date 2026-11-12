@@ -86,11 +86,11 @@ export class ClientQuery extends EventEmitter {
   }
 
   /** Sends a command and resolves with the parsed rows of its response. */
-  send(name, params = {}, flags = []) {
+  send(name, params = {}, flags = [], props = []) {
     if (!this.#socket || this.#socket.destroyed) {
       return Promise.reject(new Error('ClientQuery is not connected'));
     }
-    const line = buildCommand(name, params, flags);
+    const line = buildCommand(name, params, flags, props);
     return new Promise((resolve, reject) => {
       this.#queue.push({ line, resolve, reject, rows: [] });
       this.#flush();

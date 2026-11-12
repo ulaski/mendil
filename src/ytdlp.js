@@ -23,6 +23,13 @@ export function isGlobalError(text) {
   return GLOBAL_ERRORS.some((re) => re.test(text));
 }
 
+export const YOUTUBE_DOCS_URL = 'https://github.com/ulaski/mendil/blob/main/docs/youtube.md';
+
+/** YouTube refusing this server (usually a data-center IP); see docs/youtube.md. */
+export function isYoutubeBlock(text) {
+  return /confirm you.?re not a bot|sign in to confirm|HTTP Error 429/i.test(text);
+}
+
 /** Last "ERROR:" line of yt-dlp/ffmpeg output, without the noise. */
 export function summarizeError(stderr) {
   const lines = String(stderr).split('\n').map((l) => l.trim()).filter(Boolean);
@@ -35,10 +42,11 @@ export function summarizeError(stderr) {
  * YouTube). A short socket timeout turns a stalled connection into a quick retry instead
  * of minutes of silence.
  */
-export function baseArgs({ cookiesFile, cacheDir } = {}) {
+export function baseArgs({ cookiesFile, cacheDir, proxy } = {}) {
   const args = ['--no-warnings', '--js-runtimes', 'node', '--socket-timeout', '10'];
   if (cacheDir) args.push('--cache-dir', cacheDir);
   if (cookiesFile) args.push('--cookies', cookiesFile);
+  if (proxy) args.push('--proxy', proxy);
   return args;
 }
 
@@ -118,15 +126,15 @@ async function dumpJson(target, extraArgs, opts) {
  *  - a playlist URL        -> up to maxPlaylistItems tracks
  *  - anything else         -> first YouTube search result
  */
-export async function resolveTracks(input, { maxPlaylistItems = 50, cookiesFile, cacheDir } = {}) {
+export async function resolveTracks(input, { maxPlaylistItems = 50, cookiesFile, cacheDir, proxy } = {}) {
   const target = isUrl(input) ? input : `ytsearch1:${input}`;
-  const json = await dumpJson(target, ['--playlist-end', String(maxPlaylistItems)], { cookiesFile, cacheDir });
+  const json = await dumpJson(target, ['--playlist-end', String(maxPlaylistItems)], { cookiesFile, cacheDir, proxy });
   const entries = json._type === 'playlist' ? json.entries || [] : [json];
   const tracks = entries.map(toTrack).filter(Boolean);
   return { tracks, playlistTitle: json._type === 'playlist' && isUrl(input) ? json.title : null };
 }
 
-export async function searchTracks(query, { count = 5, cookiesFile, cacheDir } = {}) {
-  const json = await dumpJson(`ytsearch${count}:${query}`, [], { cookiesFile, cacheDir });
+export async function searchTracks(query, { count = 5, cookiesFile, cacheDir, proxy } = {}) {
+  const json = await dumpJson(`ytsearch${count}:${query}`, [], { cookiesFile, cacheDir, proxy });
   return (json.entries || []).map(toTrack).filter(Boolean);
 }

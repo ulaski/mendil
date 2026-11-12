@@ -1,5 +1,5 @@
 import { LOOP_MODES } from './player.js';
-import { resolveTracks, searchTracks } from './ytdlp.js';
+import { isYoutubeBlock, resolveTracks, searchTracks, YOUTUBE_DOCS_URL } from './ytdlp.js';
 import { formatDuration, safe, trackLink } from './format.js';
 
 const LOOP_ALIASES = { off: 'off', one: 'one', track: 'one', all: 'all', queue: 'all' };
@@ -29,6 +29,7 @@ export function createCommands(bot) {
       bot.recordResolve?.(Date.now() - started);
     } catch (err) {
       if (err.busy) return ctx.reply(t('busy'));
+      if (isYoutubeBlock(err.message)) return ctx.reply(t('youtubeBlocked', { url: YOUTUBE_DOCS_URL }));
       return ctx.reply(t('notFound', { reason: safe(err.message) }));
     }
     return addTracks(ctx, result.tracks, { front, playlistTitle: result.playlistTitle });
@@ -86,6 +87,7 @@ export function createCommands(bot) {
           results = await searchTracks(arg, { ...config.player, count: 5 });
         } catch (err) {
           if (err.busy) return ctx.reply(t('busy'));
+          if (isYoutubeBlock(err.message)) return ctx.reply(t('youtubeBlocked', { url: YOUTUBE_DOCS_URL }));
           return ctx.reply(t('searchFailed', { reason: safe(err.message) }));
         }
         if (results.length === 0) return ctx.reply(t('noResults'));
@@ -231,6 +233,18 @@ export function createCommands(bot) {
         } catch (err) {
           return ctx.reply(t('joinFailed', { reason: safe(err.queryMessage || err.message) }));
         }
+      },
+    },
+    {
+      names: ['whoami', 'me', 'id'],
+      run: async (ctx) => {
+        let groups = '?';
+        try {
+          groups = (await bot.clientInfo(ctx.invokerId)).groups.join(', ') || '-';
+        } catch {
+          // not visible to the bot; the unique ID from the message is still useful
+        }
+        return ctx.reply(t('whoami', { name: safe(ctx.invokerName), uid: ctx.invokerUid, groups }));
       },
     },
     {

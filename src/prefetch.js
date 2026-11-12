@@ -46,9 +46,9 @@ export class Prefetcher {
   #jobs = new Map(); // key -> job
   #wanted = [];
 
-  constructor({ dir, cookiesFile, cacheDir, maxDuration = 30 * 60, normalize, targetLufs = -16, log, bin = {} }) {
+  constructor({ dir, cookiesFile, cacheDir, proxy, maxDuration = 30 * 60, normalize, targetLufs = -16, log, bin = {} }) {
     this.dir = dir;
-    this.opts = { cookiesFile, cacheDir };
+    this.opts = { cookiesFile, cacheDir, proxy };
     this.maxDuration = maxDuration;
     this.normalize = normalize;
     this.targetLufs = targetLufs;

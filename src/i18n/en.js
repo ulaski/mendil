@@ -4,6 +4,7 @@ export default {
   // announcements
   nowPlaying: '▶ Now playing: {track} ({length}) — requested by {user}',
   playFailed: 'Could not play {title} — {reason}',
+  youtubeBlocked: 'YouTube is refusing requests from this server (it often blocks data-center IPs). The queue is kept. How to fix it: [url]{url}[/url] — then {prefix}resume.',
   playbackHalted: 'Playback stopped because tracks keep failing: {reason}. The queue is kept — use {prefix}resume to try again.',
   live: 'live',
 
@@ -54,6 +55,14 @@ export default {
   loopSet: 'Loop: {mode}',
   loopModes: { off: 'off', one: 'track', all: 'queue' },
 
+  // channel self-check (posted once per channel)
+  hintCodec: 'Heads-up: this channel uses {codec} (quality {quality}), which makes music sound poor. An admin can switch it to Opus Music, quality 10 (Edit Channel → Audio).',
+  hintQuality: "Heads-up: this channel's audio quality is {quality}. For music, an admin can raise it to 10 (Edit Channel → Audio).",
+  hintTalkPower: 'Heads-up: nobody can hear me in this channel. It needs talk power {needed} and I have {have}. An admin can give me more talk power or make me a talker.',
+
+  // whoami
+  whoami: '{name}: your unique ID is [b]{uid}[/b], server groups: {groups}. Admins can put these in ALLOWED_UIDS / ALLOWED_GROUPS.',
+
   // volume / channel
   volume: 'Volume: {volume}%',
   volumeRange: 'Enter a value between 0 and 100.',
@@ -80,6 +89,7 @@ export default {
     loop: 'Loop mode: off / track / queue',
     vol: 'Show or set the volume',
     join: 'Move the bot to your channel',
+    whoami: 'Show your unique ID and server groups (for access control)',
     help: 'This list',
   },
   usage: {

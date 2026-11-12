@@ -58,6 +58,8 @@ export function loadConfig() {
       language: (env.BOT_LANGUAGE || 'en').toLowerCase(),
       prefix: env.COMMAND_PREFIX || '!',
       allowedUids: list(env.ALLOWED_UIDS),
+      allowedGroups: list(env.ALLOWED_GROUPS),
+      channelHints: bool(env.CHANNEL_HINTS, true),
       announceTracks: bool(env.ANNOUNCE_TRACKS, true),
     },
     player: {
@@ -68,6 +70,7 @@ export function loadConfig() {
       maxPlaylistItems: int(env.MAX_PLAYLIST_ITEMS, 50, { min: 1 }),
       maxTrackDuration: int(env.MAX_TRACK_DURATION, 0, { min: 0 }),
       cookiesFile: env.YTDLP_COOKIES_FILE || '',
+      proxy: env.YTDLP_PROXY || '',
       cacheDir: path.join(dataDir, 'yt-dlp-cache'), // player JS etc.; speeds up extraction
       prefetch: bool(env.PREFETCH, true),
       prefetchDir: env.PREFETCH_DIR || '/tmp/mendil-cache',
