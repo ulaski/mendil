@@ -34,6 +34,7 @@ In Türkiye, people at a *gazino* or *meyhane* used to write their song request 
 - 🌍 Speaks English and Turkish. [Adding a language](CONTRIBUTING.md#adding-a-language) means translating one file.
 - 🩺 Tells you when a channel setting makes music sound bad or keeps it from being heard, and explains YouTube blocks
 - 🔐 Can be limited to certain people, by TeamSpeak unique ID or server group
+- 🖥️ Has a web panel: see what's playing, manage the queue and add songs from your browser or phone
 - 🧪 Comes with two voice engines: the official TeamSpeak client, or an experimental native engine that also runs on ARM and plays music in any channel
 
 ## How it works
@@ -156,6 +157,21 @@ volumes:
 `TS3CLIENT_LICENSE` isn't needed, because no TeamSpeak client is downloaded. Everything else in `.env` stays the same. From source, build it with `docker build --target native .`.
 </details>
 
+### Web panel
+
+Mendil also has a web panel on port 8080: what's playing, the queue, volume and loop, a box to request songs and search YouTube, and the live log. It works on phones too.
+
+To open it, publish the port in `docker-compose.yml`:
+
+```yaml
+    ports:
+      - "127.0.0.1:8080:8080"
+```
+
+Then open http://localhost:8080 on the machine that runs Mendil. The password is in the log on first start (`docker compose logs mendil | grep password`), or choose one with `PANEL_PASSWORD`.
+
+On a server, keep the `127.0.0.1:` part and reach the panel through an SSH tunnel (`ssh -L 8080:localhost:8080 you@server`, then open http://localhost:8080), or put it behind a reverse proxy with HTTPS. Don't publish it to the internet over plain HTTP: the password would travel unencrypted. `PANEL_PORT=0` turns the panel off.
+
 ### Where is your TeamSpeak server?
 
 | Setup | What to do |
@@ -232,6 +248,8 @@ All settings are environment variables, usually set in `.env`.
 | `ALLOW_PRIVATE_URLS` | `false` | Let `!play` open addresses on private networks (LAN, localhost), e.g. a media server at home. Off by default, see [SECURITY.md](SECURITY.md). |
 | `VOICE_BACKEND` | `classic` | `classic` (official TeamSpeak client) or `native`, see [How it works](#how-it-works). The `native` image sets it for you. |
 | `NATIVE_BITRATE` | `128` | Native engine only: Opus bitrate in kbit/s, 48 to 192 |
+| `PANEL_PORT` | `8080` | Port of the web panel inside the container. `0` turns it off. |
+| `PANEL_PASSWORD` | | Password for the web panel. If empty, one is generated on first start and printed in the log. |
 | `TS3_CLIENT_VERSION` | `3.6.2` | TeamSpeak client version to download |
 | `TS3_CLIENT_SHA256` | | Expected SHA-256 of that download. Known for 3.6.2; set it if you change the version. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
@@ -318,6 +336,8 @@ src/bot.js                  chat → commands, access control, health, watchdog 
 src/voice/classic.js        Classic engine: TS3 client process, ClientQuery, reconnects
 src/voice/native.js         Native engine: teamspeak-js connection, reconnects, identity
 src/voice/opus.js           Ogg/Opus demuxer and the 20 ms frame pacer (Native)
+src/requests.js             song requests, shared by chat commands and the web panel
+src/panel/                  web panel: HTTP API with server-sent events, and the page (public/)
 src/reconnect.js            reconnect policy (backoff, kicks, bans), unit-tested with a fake clock
 src/commands.js             chat commands
 src/player.js               queue and playback (file or yt-dlp stream → ffmpeg → PulseAudio)

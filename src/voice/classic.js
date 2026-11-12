@@ -442,9 +442,10 @@ export class ClassicBackend extends EventEmitter {
 
   async channelSettings(cid) {
     if (!this.#cq?.connected) throw new Error('not connected');
-    const [ch] = await this.#cq.send('channelvariable', { cid }, [], ['channel_codec', 'channel_codec_quality', 'channel_needed_talk_power']);
+    const [ch] = await this.#cq.send('channelvariable', { cid }, [], ['channel_codec', 'channel_codec_quality', 'channel_needed_talk_power', 'channel_name']);
     const [me] = await this.#cq.send('clientvariable', { clid: this.me.clid }, [], ['client_talk_power', 'client_is_talker']);
     return {
+      name: ch.channel_name ?? '',
       codec: Number(ch.channel_codec),
       quality: Number(ch.channel_codec_quality),
       neededTalkPower: Number(ch.channel_needed_talk_power || 0),

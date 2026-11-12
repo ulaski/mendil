@@ -381,6 +381,7 @@ export class NativeBackend extends EventEmitter {
     const me = view.clients.get(this.#client.clientID);
     if (!ch) throw new Error(`channel ${cid} is not in view`);
     return {
+      name: ch.name ?? '',
       codec: Number(ch.codec ?? 5),
       quality: Number(ch.codecQuality ?? 10),
       neededTalkPower: Number(ch.neededTalkPower ?? 0),

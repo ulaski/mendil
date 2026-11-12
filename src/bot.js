@@ -8,6 +8,7 @@ import { StatsReporter } from './stats.js';
 import { RateLimiter } from './ratelimit.js';
 import { YtdlpUpdater } from './ytdlp-update.js';
 import { createCommands } from './commands.js';
+import { createRequests } from './requests.js';
 import { createI18n } from './i18n/index.js';
 import { chunkMessage, formatDuration, safe, stripBBCode, trackLink } from './format.js';
 import { isYoutubeBlock, YOUTUBE_DOCS_URL } from './ytdlp.js';
@@ -76,6 +77,7 @@ export class Bot {
       smokeTestUrl: () => this.player.lastGoodUrl,
       log: log.child('yt-dlp'),
     });
+    this.requests = createRequests(this);
     this.commands = createCommands(this);
 
     this.player.on('trackStart', (track) => {
@@ -291,6 +293,7 @@ export class Bot {
     const { t } = this.i18n;
     try {
       const ch = await this.voice.channelSettings(cid);
+      this.channelName = ch.name || null;
       const issues = [];
       // The native engine always sends Opus Music, which the server relays in any channel.
       if (!this.voice.playsAnyCodec) {

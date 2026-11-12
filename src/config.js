@@ -87,6 +87,12 @@ export function loadConfig() {
       prefetchDir: env.PREFETCH_DIR || '/tmp/mendil-cache',
       prefetchMaxDuration: int(env.PREFETCH_MAX_DURATION, 30 * 60, { min: 0 }),
     },
+    panel: {
+      // 0 turns the web panel off. In Docker, publish the port to reach it (see README).
+      port: int(env.PANEL_PORT, 8080, { min: 0, max: 65535 }),
+      host: env.PANEL_HOST || '0.0.0.0',
+      password: env.PANEL_PASSWORD || '',
+    },
     ytdlp: {
       autoUpdate: bool(env.YTDLP_AUTO_UPDATE, true),
       venv: env.YTDLP_VENV || '/opt/yt-dlp',

@@ -38,6 +38,9 @@ RUN chmod 755 /usr/local/bin/entrypoint.sh \
 ENV HOME=/home/node \
     NODE_ENV=production
 
+# Web panel (PANEL_PORT); publish it to use it.
+EXPOSE 8080
+
 # The bot's identity, settings and saved queue. Persist it to keep the same identity
 # (and with it the server groups you gave the bot).
 VOLUME ["/home/node/.ts3client"]

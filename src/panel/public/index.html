@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Mendil</title>
+  <link rel="icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" href="/icon.png">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main id="login" class="login" hidden>
+    <form id="login-form" class="login-card" autocomplete="on">
+      <img src="/logo.png" alt="" width="120" height="120">
+      <h1>Mendil</h1>
+      <label for="password" data-t="passwordLabel">Panel password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <button type="submit" class="btn primary" data-t="signIn">Sign in</button>
+      <p id="login-error" class="form-error" role="alert"></p>
+      <p class="hint" data-t="passwordHint">The password is in the bot's log on first start, or set it with PANEL_PASSWORD.</p>
+    </form>
+  </main>
+
+  <div id="app" hidden>
+    <header class="topbar">
+      <img src="/logo.png" alt="" width="44" height="44" class="mark">
+      <span class="wordmark" id="nickname">Mendil</span>
+      <p class="status" id="status" aria-live="polite"><span class="dot"></span><span id="status-text"></span></p>
+      <span class="engine" id="engine"></span>
+      <button class="btn ghost small" id="logout" data-t="signOut">Sign out</button>
+    </header>
+
+    <div class="layout">
+      <section class="stage" aria-labelledby="np-heading">
+        <h2 id="np-heading" class="visually-hidden" data-t="nowPlaying">Now playing</h2>
+        <article class="napkin now" id="now">
+          <div class="now-empty" id="now-empty">
+            <p class="now-empty-title" data-t="nothingPlaying">Nothing is playing.</p>
+            <p data-t="nothingPlayingHint">Write a song on the napkin below, or type !play in TeamSpeak.</p>
+          </div>
+          <div class="now-track" id="now-track" hidden>
+            <img id="thumb" class="thumb" alt="" width="160" height="90" hidden>
+            <div class="now-text">
+              <a id="now-title" class="now-title" target="_blank" rel="noopener noreferrer"></a>
+              <p class="by" id="now-by"></p>
+            </div>
+            <div class="progress" aria-hidden="true"><span id="progress-bar"></span></div>
+            <p class="times"><span id="elapsed">0:00</span><span id="length"></span></p>
+          </div>
+          <div class="controls">
+            <button class="btn round primary" id="playpause" aria-label="Pause">
+              <svg viewBox="0 0 24 24" class="i-pause"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+              <svg viewBox="0 0 24 24" class="i-play"><path d="M8 5.5v13l10.5-6.5z"/></svg>
+            </button>
+            <button class="btn round" id="skip" data-t-label="skip" aria-label="Skip">
+              <svg viewBox="0 0 24 24"><path d="M6 5.5v13l9-6.5z"/><rect x="16" y="5" width="3" height="14" rx="1"/></svg>
+            </button>
+            <button class="btn round" id="stop" data-t-label="stop" aria-label="Stop and clear the queue">
+              <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>
+            </button>
+            <label class="volume">
+              <span class="visually-hidden" data-t="volume">Volume</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5v14l-4.5-4.5H4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              <input type="range" id="volume" min="0" max="100" step="1">
+              <output id="volume-value" for="volume"></output>
+            </label>
+          </div>
+        </article>
+
+        <form class="request" id="request-form" autocomplete="off">
+          <label for="query" class="request-label" data-t="requestLabel">Request a song</label>
+          <div class="request-row">
+            <input id="query" type="text" maxlength="500" data-t-placeholder="requestPlaceholder" placeholder="A YouTube link, a playlist, or what to search for">
+          </div>
+          <div class="request-actions">
+            <button type="submit" class="btn primary" data-t="play">Add to queue</button>
+            <button type="button" class="btn" id="play-next" data-t="playNext">Play next</button>
+            <button type="button" class="btn ghost" id="search" data-t="searchButton">Show results</button>
+          </div>
+          <p class="request-result" id="request-result" role="status"></p>
+          <ol class="results" id="results" hidden></ol>
+        </form>
+      </section>
+
+      <section class="queue" aria-labelledby="queue-heading">
+        <div class="queue-head">
+          <h2 id="queue-heading" data-t="queue">Queue</h2>
+          <p class="queue-summary" id="queue-summary"></p>
+          <div class="queue-actions">
+            <button class="btn ghost small" id="shuffle" data-t="shuffle">Shuffle</button>
+            <button class="btn ghost small" id="clear" data-t="clear">Clear</button>
+          </div>
+        </div>
+        <div class="loop-row">
+          <span class="loop-label" id="loop-label" data-t="loop">Loop</span>
+          <div class="segmented" role="radiogroup" aria-labelledby="loop-label">
+            <button type="button" role="radio" data-loop="off" data-t="loopOff">Off</button>
+            <button type="button" role="radio" data-loop="one" data-t="loopOne">Track</button>
+            <button type="button" role="radio" data-loop="all" data-t="loopAll">Queue</button>
+          </div>
+        </div>
+        <ol class="slips" id="slips"></ol>
+        <p class="queue-empty" id="queue-empty" data-t="queueEmpty">The queue is empty. Requests show up here as they come in.</p>
+      </section>
+    </div>
+
+    <details class="logs" id="logs">
+      <summary data-t="log">Log</summary>
+      <ol id="log-lines" class="log-lines"></ol>
+    </details>
+  </div>
+</body>
+</html>
