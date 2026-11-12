@@ -18,7 +18,7 @@ First public version of 🧻 Mendil.
 - When tracks keep failing, playback stops and the queue is kept. `!resume` or a new `!play` retries.
 
 ### TeamSpeak
-- Works with **TeamSpeak 3** and **TeamSpeak 6** servers (tested with 3.13 and 6.0.0-beta13.1).
+- Works with TeamSpeak 3 and TeamSpeak 6 servers (tested with 3.13 and 6.0.0-beta13.1).
 - It runs the official TeamSpeak 3 client headless (Xvfb + PulseAudio) and controls it through the ClientQuery plugin. The client is downloaded on first start once you accept its license (`TS3CLIENT_LICENSE=accept`).
 - Recovers on its own:
   - A lost connection is retried within seconds, then with backoff.

@@ -23,19 +23,19 @@ In Türkiye, people at a *gazino* or *meyhane* used to write their song request 
 
 ## Features
 
-- 🎵 **Plays anything on YouTube:** a link, a whole playlist, or just search terms
-- 📝 **A real queue:** search & pick, play next, skip, pause, loop, shuffle and volume
-- 🔊 **Consistent loudness** between tracks, so nobody has to ride the volume
-- 🐳 **One container, two settings:** accept the TeamSpeak license, point it at your server, done
-- ⏭️ **No gaps between songs:** the next track is downloaded while the current one plays
-- 🩹 **Recovers on its own** from crashes, kicks, bans and server restarts, and **picks up where it left off** after a restart
-- 🌍 **Speaks your language:** English and Turkish built in, and [adding a language](CONTRIBUTING.md#adding-a-language) means translating one file
-- 🩺 **Tells you what's wrong:** points out channel settings that make music sound bad or inaudible, and explains YouTube blocks
-- 🔐 **Access control** by TeamSpeak unique ID or server group
+- 🎵 Plays YouTube links, whole playlists, or the first result for a search
+- 📝 Has a proper queue: search and pick, play next, skip, pause, loop, shuffle and volume
+- 🔊 Keeps every track at the same loudness, so nobody has to ride the volume
+- 🐳 Runs as one container. You accept the TeamSpeak license and give it your server's address.
+- ⏭️ Downloads the next track while the current one plays, so songs follow each other without a gap
+- 🩹 Gets back on its feet after crashes, kicks, bans and server restarts, and after a restart it continues the song where it stopped
+- 🌍 Speaks English and Turkish. [Adding a language](CONTRIBUTING.md#adding-a-language) means translating one file.
+- 🩺 Tells you when a channel setting makes music sound bad or keeps it from being heard, and explains YouTube blocks
+- 🔐 Can be limited to certain people, by TeamSpeak unique ID or server group
 
 ## How it works
 
-A bot can only send voice to a TeamSpeak server by connecting as a real client; ServerQuery can't send audio. Mendil runs the **official TeamSpeak 3 Linux client** headless and remote-controls it:
+ServerQuery can't send audio, so a bot has to connect to TeamSpeak as a real client. Mendil runs the official TeamSpeak 3 Linux client without a screen and controls it remotely:
 
 ```
 TeamSpeak chat ──► TS3 client ◄── ClientQuery (127.0.0.1:25639) ──► Node.js controller
@@ -44,17 +44,17 @@ TeamSpeak chat ──► TS3 client ◄── ClientQuery (127.0.0.1:25639) ─�
                        └────────────── virtual sound card ◄──────────────┘
 ```
 
-- **Xvfb** provides a virtual screen and **PulseAudio** a virtual sound card.
-- **yt-dlp** downloads the audio (the next track while the current one plays) and **ffmpeg** plays it into the virtual card, at a loudness measured once per track. The TeamSpeak client uses that card as its microphone. Live streams and very long tracks are streamed instead.
-- The queue, the current position, loop mode and volume are saved, so a restart or update resumes where it stopped.
-- The controller reads chat through the client's **ClientQuery** plugin, replies, and only transmits while music is playing.
-- On first start, the license dialog, intro wizard and audio settings are pre-configured, so nobody needs to click through the GUI.
+- Xvfb provides a virtual screen and PulseAudio a virtual sound card.
+- yt-dlp downloads the audio, fetching the next track while the current one plays. ffmpeg plays it into the virtual card at a loudness measured once per track, and the TeamSpeak client uses that card as its microphone. Live streams and very long tracks are streamed instead of downloaded.
+- The queue, the current position, the loop mode and the volume are saved, so a restart or an update continues where it stopped.
+- The controller reads chat through the client's ClientQuery plugin, answers there, and only transmits while music is playing.
+- Mendil fills in the license dialog, the intro wizard and the audio settings before the client first starts, so nobody has to click through the client's windows.
 
 ## Requirements
 
-- A **TeamSpeak 3 or TeamSpeak 6** server. Tested with TS3 server 3.13.9 and TS6 server 6.0.0-beta13.1.
+- A TeamSpeak 3 or TeamSpeak 6 server. Tested with TS3 server 3.13.9 and TS6 server 6.0.0-beta13.1.
 - Docker with Docker Compose
-- An **x86_64 (amd64)** host. The official TS3 client only exists for x86_64. ARM machines (Raspberry Pi, Apple Silicon) can run it under emulation, but it's slow.
+- An x86_64 (amd64) host, because the official TS3 client only exists for x86_64. ARM machines such as a Raspberry Pi or a Mac with Apple Silicon can run it under emulation, but slowly.
 - About 300 MB of RAM per bot
 - Internet access on first start, to download the TeamSpeak client
 
@@ -125,12 +125,12 @@ docker compose up -d --build
 
 ### Recommended server settings
 
-- **Channel codec:** set Mendil's channel to **Opus Music** with quality **10** (*Edit Channel → Audio*). The default *Opus Voice* codec makes music sound bad.
-- **Talk power:** if the channel requires talk power, give Mendil's server group enough.
+- Set Mendil's channel to the **Opus Music** codec with quality 10 (*Edit Channel → Audio*). The default *Opus Voice* codec makes music sound bad.
+- If the channel requires talk power, give Mendil's server group enough of it.
+- Long queue listings send a few messages in a row. If the server's anti-flood blocks Mendil, add it to a group with `b_client_ignore_antiflood`.
+- Mendil keeps its identity across restarts in the `ts3client-data` volume, so a server group you give it stays.
 
-Mendil checks both when it joins a channel and posts a short hint if something is off (once per channel; `CHANNEL_HINTS=false` turns that off).
-- **Anti-flood:** long queue listings send a few messages in a row. If Mendil gets flood-blocked, add it to a group with `b_client_ignore_antiflood`.
-- **Permanent server group:** Mendil keeps its identity across restarts (stored in the `ts3client-data` volume), so any server group you give it sticks.
+Mendil checks the codec and talk power when it joins a channel and posts a short hint if something is off, once per channel. `CHANNEL_HINTS=false` turns this off.
 
 ## Commands
 
@@ -177,12 +177,12 @@ All settings are environment variables, usually set in `.env`.
 | `ALLOWED_GROUPS` | | Comma-separated server group IDs allowed to control the bot. If both lists are empty, everyone can; `!help` and `!whoami` always work. |
 | `CHANNEL_HINTS` | `true` | Post a hint when the channel's codec or talk power is wrong for music |
 | `ANNOUNCE_TRACKS` | `true` | Post "Now playing" messages |
-| `DEFAULT_VOLUME` | `70` | Start-up volume, 0–100 |
+| `DEFAULT_VOLUME` | `70` | Start-up volume, 0 to 100 |
 | `NORMALIZE_AUDIO` | `true` | Loudness-normalise tracks to -16 LUFS |
 | `MAX_QUEUE` | `100` | Max queue length |
 | `MAX_PLAYLIST_ITEMS` | `50` | Max tracks taken from one playlist |
 | `MAX_TRACK_DURATION` | `0` | Max track length in seconds. `0` means unlimited. |
-| `PREFETCH` | `true` | Download tracks before playing them (no gaps, robust against network hiccups). `false` streams everything. |
+| `PREFETCH` | `true` | Download tracks before playing them, so there are no gaps and network hiccups don't matter. `false` streams everything. |
 | `PREFETCH_MAX_DURATION` | `1800` | Longer tracks (in seconds) and live streams are streamed instead of downloaded |
 | `YTDLP_AUTO_UPDATE` | `true` | Keep yt-dlp up to date in the background (daily, and when YouTube extraction breaks). A new version that fails a self-test is rolled back. |
 | `YTDLP_COOKIES_FILE` | | Cookies file for YouTube, see [docs/youtube.md](docs/youtube.md) |
@@ -217,7 +217,7 @@ If Mendil gets kicked or banned while connected, the log says so, with who did i
 Check for a hint from Mendil in the channel chat (talk power, codec), and that it isn't muted by the server. `!np` shows whether something is actually playing.
 
 **"Sign in to confirm you're not a bot"**
-YouTube sometimes blocks data-center IPs. Fix it with cookies from a throwaway YouTube account or with a proxy (`YTDLP_PROXY`). Step-by-step instructions are in **[docs/youtube.md](docs/youtube.md)**. Mendil links to that page in chat when it detects the block.
+YouTube sometimes blocks data-center IPs. Cookies from a throwaway YouTube account or a proxy (`YTDLP_PROXY`) fix it, and [docs/youtube.md](docs/youtube.md) explains both step by step. Mendil links to that page in chat when it detects the block.
 
 **Music sounds bad**
 The channel codec is almost always the cause. Use Opus Music at quality 10.
@@ -234,7 +234,7 @@ Every 10 minutes the log has a `stats:` line with CPU and memory per process and
 ## FAQ
 
 **Why a full TeamSpeak client instead of a lightweight protocol library?**
-The official client is guaranteed to speak exactly what servers expect, and it's the most reliable way to get going. It costs some memory and only runs on x86_64. A lighter engine based on an open-source protocol implementation is on the roadmap. It would also bring ARM support and a desktop app.
+The official client speaks exactly what servers expect, which made it the most reliable way to start. It costs some memory and only runs on x86_64. A lighter engine based on an open-source protocol implementation is on the roadmap, and it would also bring ARM support and a desktop app.
 
 **Can I run several bots?**
 Yes. Run one container per bot, each with its own volumes and nickname. Use a separate compose project (`docker compose -p mendil2 …`) or directory for each.
@@ -254,7 +254,7 @@ yt-dlp supports SoundCloud and many other sites, and direct links usually work. 
 npm test     # unit tests (Node.js 22+, no Docker needed)
 ```
 
-The controller has no npm dependencies; it uses only the Node.js standard library.
+The controller uses only the Node.js standard library and has no npm dependencies.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the end-to-end setup.
 
