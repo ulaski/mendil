@@ -1,21 +1,19 @@
 services:
-  musicbot:
+  mendil:
+    image: ghcr.io/ulaski/mendil:latest
     build: .
-    image: ts3-music-bot:latest
-    platform: linux/amd64 # the official TS3 Linux client is x86_64 only
-    container_name: ts3-music-bot
+    platform: linux/amd64 # the official TS3 client is x86_64 only
+    container_name: mendil
     restart: unless-stopped
     init: true
     env_file: .env
     shm_size: 256m # Qt/Chromium inside the TS3 client uses /dev/shm
     volumes:
-      - ts3client-data:/home/node/.ts3client
-      # Optional: YouTube cookies (see README) — then set YTDLP_COOKIES_FILE=/cookies/cookies.txt
+      - ts3client-data:/home/node/.ts3client # identity + settings
+      - ts3client-bin:/opt/ts3client # downloaded TeamSpeak client
+      # Optional YouTube cookies (see README), then set YTDLP_COOKIES_FILE=/cookies/cookies.txt
       # - ./cookies:/cookies:ro
-    # If the TS3 server runs on the same host *outside* Docker, either set
-    # TS3_HOST=host.docker.internal and uncomment this:
-    # extra_hosts:
-    #   - "host.docker.internal:host-gateway"
 
 volumes:
   ts3client-data:
+  ts3client-bin:

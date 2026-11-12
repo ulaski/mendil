@@ -1,8 +1,43 @@
 #!/bin/bash
-# Prepares the virtual display + audio devices, then hands over to the Node controller.
+# Installs the TeamSpeak client if needed, prepares the virtual display + audio devices,
+# then hands over to the Node controller.
 set -euo pipefail
 
 log() { echo "$(date -u +%Y-%m-%dT%H:%M:%S.000Z) [entrypoint] $*"; }
+die() { log "ERROR: $*"; exit 1; }
+
+TS3_CLIENT_DIR="${TS3_CLIENT_DIR:-/opt/ts3client}"
+TS3_CLIENT_VERSION="${TS3_CLIENT_VERSION:-3.6.2}"
+
+# --- TeamSpeak 3 client (proprietary, downloaded on first start) ---------------
+install_ts3_client() {
+  if [ "${TS3CLIENT_LICENSE:-}" != "accept" ]; then
+    die "The TeamSpeak 3 client is proprietary software and is downloaded on first start.
+Read its license (https://www.teamspeak.com/en/privacy-and-terms/) and set TS3CLIENT_LICENSE=accept to accept it."
+  fi
+
+  local arch
+  arch="$(uname -m)"
+  [ "$arch" = "x86_64" ] || log "WARNING: the TeamSpeak 3 client only exists for x86_64, this is $arch (expect emulation to be slow)"
+
+  local url="https://files.teamspeak-services.com/releases/client/${TS3_CLIENT_VERSION}/TeamSpeak3-Client-linux_amd64-${TS3_CLIENT_VERSION}.run"
+  local tmp
+  tmp="$(mktemp -d)"
+  log "downloading TeamSpeak client ${TS3_CLIENT_VERSION}…"
+  curl -fsSL -o "$tmp/ts3client.run" "$url" || die "download failed: $url"
+  rm -rf "${TS3_CLIENT_DIR:?}/"* "${TS3_CLIENT_DIR}/".[!.]* 2>/dev/null || true
+  # --accept: the license was accepted above via TS3CLIENT_LICENSE=accept
+  sh "$tmp/ts3client.run" --accept --noexec --nox11 --target "$TS3_CLIENT_DIR" >/dev/null \
+    || die "could not extract the TeamSpeak client"
+  rm -rf "$tmp"
+  echo "$TS3_CLIENT_VERSION" > "$TS3_CLIENT_DIR/.installed-version"
+  log "TeamSpeak client installed to $TS3_CLIENT_DIR"
+}
+
+if [ "$(cat "$TS3_CLIENT_DIR/.installed-version" 2>/dev/null)" != "$TS3_CLIENT_VERSION" ] \
+   || [ ! -x "$TS3_CLIENT_DIR/ts3client_linux_amd64" ]; then
+  install_ts3_client
+fi
 
 # --- Virtual X display for the Qt client -----------------------------------
 rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 2>/dev/null || true
@@ -18,7 +53,7 @@ for _ in $(seq 1 50); do
   pactl info >/dev/null 2>&1 && break
   sleep 0.2
 done
-pactl info >/dev/null || { log "PulseAudio did not start"; cat /tmp/pulseaudio.log; exit 1; }
+pactl info >/dev/null || { cat /tmp/pulseaudio.log; die "PulseAudio did not start"; }
 
 pactl unload-module module-suspend-on-idle >/dev/null 2>&1 || true
 pactl load-module module-null-sink sink_name=tsbot sink_properties=device.description=TS3Bot-Music >/dev/null
@@ -29,7 +64,7 @@ log "Xvfb and PulseAudio ready"
 
 # --- yt-dlp self-update (YouTube changes often) -----------------------------
 if [ "${YTDLP_AUTO_UPDATE:-true}" = "true" ]; then
-  log "updating yt-dlp..."
+  log "updating yt-dlp…"
   timeout 60 yt-dlp -U 2>&1 | tail -n 1 || log "yt-dlp update failed, continuing with $(yt-dlp --version)"
 fi
 

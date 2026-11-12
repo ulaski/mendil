@@ -1,9 +1,10 @@
-# TeamSpeak 3 Music Bot
-# The official TS3 Linux client only exists for x86_64, so this image must be
-# built/run as linux/amd64 (docker-compose.yml sets the platform).
+# 🧻 Mendil — a music bot for TeamSpeak 3
+#
+# The official TeamSpeak 3 client is proprietary, so it is NOT part of this image:
+# docker/entrypoint.sh downloads it on first start once you accept its license
+# (TS3CLIENT_LICENSE=accept). It only exists for x86_64, hence linux/amd64 only.
 FROM node:22-bookworm-slim
 
-ARG TS3_CLIENT_VERSION=3.6.2
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Xvfb + PulseAudio give the GUI client a virtual screen and a virtual sound card.
@@ -19,13 +20,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libxkbfile1 libxrandr2 libxshmfence1 libxss1 libxtst6 \
  && rm -rf /var/lib/apt/lists/*
 
-# Official TeamSpeak 3 client. --accept accepts the TeamSpeak EULA non-interactively.
-RUN curl -fsSL -o /tmp/ts3client.run \
-      "https://files.teamspeak-services.com/releases/client/${TS3_CLIENT_VERSION}/TeamSpeak3-Client-linux_amd64-${TS3_CLIENT_VERSION}.run" \
- && sh /tmp/ts3client.run --accept --noexec --target /opt/ts3client \
- && rm /tmp/ts3client.run \
- && chmod -R a+rX /opt/ts3client
-
 # yt-dlp standalone binary; owned by the runtime user so it can self-update (yt-dlp -U).
 RUN curl -fsSL -o /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux \
  && chmod 755 /usr/local/bin/yt-dlp \
@@ -36,14 +30,19 @@ COPY package.json ./
 COPY src ./src
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod 755 /usr/local/bin/entrypoint.sh \
- && mkdir -p /home/node/.ts3client && chown -R node:node /home/node
+ && mkdir -p /opt/ts3client /home/node/.ts3client \
+ && chown -R node:node /opt/ts3client /home/node
 
 USER node
 ENV HOME=/home/node \
     DISPLAY=:99 \
-    NODE_ENV=production
+    NODE_ENV=production \
+    TS3_CLIENT_VERSION=3.6.2
 
-# Persist the client's identity + settings (keeps the same TS3 identity across restarts).
+# The client's identity + settings. Persist it to keep the same TS3 identity (and server groups).
 VOLUME ["/home/node/.ts3client"]
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=3m --retries=3 \
+  CMD ["node", "/app/src/healthcheck.js"]
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

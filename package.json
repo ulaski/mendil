@@ -1,7 +1,22 @@
 {
-  "name": "ts3-music-bot",
-  "version": "1.0.0",
-  "description": "TeamSpeak 3 music bot: headless TS3 client + yt-dlp/ffmpeg, controlled via chat commands",
+  "name": "mendil",
+  "version": "0.1.0",
+  "description": "Mendil: a self-hosted music bot for TeamSpeak 3. Request songs in chat, it plays them in your channel.",
+  "keywords": [
+    "teamspeak",
+    "teamspeak3",
+    "ts3",
+    "music-bot",
+    "mendil",
+    "youtube",
+    "yt-dlp",
+    "docker"
+  ],
+  "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ulaski/mendil.git"
+  },
   "type": "module",
   "private": true,
   "main": "src/index.js",

@@ -42,7 +42,7 @@ export function loadConfig() {
       host,
       port,
       serverPassword: env.TS3_SERVER_PASSWORD || '',
-      nickname: env.BOT_NICKNAME || 'MusicBot',
+      nickname: env.BOT_NICKNAME || 'Mendil',
       channel: env.TS3_CHANNEL || '',
       channelPassword: env.TS3_CHANNEL_PASSWORD || '',
       clientDir: env.TS3_CLIENT_DIR || '/opt/ts3client',
@@ -50,6 +50,7 @@ export function loadConfig() {
       queryPort: int(env.TS3_CLIENTQUERY_PORT, 25639),
     },
     bot: {
+      language: (env.BOT_LANGUAGE || 'en').toLowerCase(),
       prefix: env.COMMAND_PREFIX || '!',
       allowedUids: list(env.ALLOWED_UIDS),
       announceTracks: bool(env.ANNOUNCE_TRACKS, true),
