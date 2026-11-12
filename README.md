@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🧻 Mendil
+<img src="docs/assets/logo.png" alt="Mendil logo: a napkin wearing headphones" width="160">
+
+# Mendil
 
 **Song requests for your TeamSpeak server.**
 
@@ -13,8 +15,8 @@ Write a song in chat and Mendil plays it in your channel.
 </div>
 
 ```
-<you>     !play daft punk around the world
-Mendil    ▶ Now playing: Daft Punk - Around The World (4:02) — requested by you
+<you>     !play fontaines dc mimesis
+Mendil    ▶ Now playing: Fontaines D.C. - Mimesis (3:52) — requested by you
 ```
 
 ### Why "Mendil"?
