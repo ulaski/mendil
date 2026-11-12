@@ -4,6 +4,7 @@ export default {
   // announcements
   nowPlaying: '▶ Now playing: {track} ({length}) — requested by {user}',
   playFailed: 'Could not play {title} — {reason}',
+  playbackHalted: 'Playback stopped because tracks keep failing: {reason}. The queue is kept — use {prefix}resume to try again.',
   live: 'live',
 
   // generic
@@ -69,7 +70,7 @@ export default {
     skip: 'Skip the current track',
     stop: 'Stop and clear the queue',
     pause: 'Pause',
-    resume: 'Resume',
+    resume: 'Resume (also retries after playback stopped on errors)',
     np: 'Show the current track',
     queue: 'Show the queue',
     remove: 'Remove a track from the queue',

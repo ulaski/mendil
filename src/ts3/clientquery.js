@@ -73,7 +73,12 @@ export class ClientQuery extends EventEmitter {
     });
 
     this.#ready = true;
-    await this.send('auth', { apikey: apiKey });
+    try {
+      await this.send('auth', { apikey: apiKey });
+    } catch (err) {
+      this.close(); // don't leave an unauthenticated socket behind
+      throw err;
+    }
   }
 
   close() {

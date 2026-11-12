@@ -5,6 +5,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+- Skipping or stopping a track no longer leaves a yt-dlp process and an ~85 MB temp directory behind. yt-dlp now runs in its own process group, which is stopped as a whole.
+- A chat command could run twice when a watchdog run overlapped the next one. Stale ClientQuery connections are now closed and ignored.
+- The container stayed up but silent when Xvfb or PulseAudio died. The bot now exits within one watchdog tick so Docker restarts it.
+- The health check could report "healthy" right after a restart, before the bot had reconnected.
+- PulseAudio ran at 44.1 kHz, so audio was resampled twice. Everything now runs at 48 kHz.
+
+### Changed
+- When tracks keep failing (3 in a row, or right away for YouTube bot checks and similar), playback stops and keeps the queue instead of draining it; `!resume` or a new `!play` retries.
+- "Now playing" is announced once audio actually starts, so a track that fails to load gives one message instead of two.
+- Outgoing chat messages are spaced 300 ms apart to stay clear of anti-flood limits.
+- TeamSpeak client restarts after crashes back off (3 s up to 2 min); after more than 5 crashes in 5 minutes the container restarts.
+- The image uses `tini` as init and a pinned Node.js base image (updated via Dependabot). Compose files rotate logs and allow 20 s for a clean shutdown.
+
 ## [0.1.0] - 2026-11-12
 
 First public version of 🧻 Mendil.

@@ -39,9 +39,15 @@ if [ "$(cat "$TS3_CLIENT_DIR/.installed-version" 2>/dev/null)" != "$TS3_CLIENT_V
   install_ts3_client
 fi
 
+# Leftovers from a previous run (/tmp survives container restarts): X lock files, the
+# health marker (must not report "healthy" before we reconnect), and yt-dlp's PyInstaller
+# extraction dirs (normally removed by yt-dlp itself, but not if it was killed hard).
+rm -rf /tmp/.X99-lock /tmp/.X11-unix/X99 /tmp/mendil.healthy /tmp/_MEI* 2>/dev/null || true
+
 # --- Virtual X display for the Qt client -----------------------------------
-rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 2>/dev/null || true
 Xvfb "${DISPLAY}" -screen 0 1024x768x16 -nolisten tcp >/tmp/xvfb.log 2>&1 &
+# The bot checks these PIDs and exits (so Docker restarts the container) if one dies.
+export XVFB_PID=$!
 
 # --- PulseAudio ---------------------------------------------------------------
 # "tsbot"   : ffmpeg plays music into this sink; its monitor is the client's microphone.
@@ -54,10 +60,15 @@ for _ in $(seq 1 50); do
   sleep 0.2
 done
 pactl info >/dev/null || { cat /tmp/pulseaudio.log; die "PulseAudio did not start"; }
+PULSE_PID="$(pgrep -u "$(id -u)" -x pulseaudio | head -n 1)"
+export PULSE_PID
 
 pactl unload-module module-suspend-on-idle >/dev/null 2>&1 || true
-pactl load-module module-null-sink sink_name=tsbot sink_properties=device.description=TS3Bot-Music >/dev/null
-pactl load-module module-null-sink sink_name=devnull sink_properties=device.description=Discard >/dev/null
+# 48 kHz end to end (ffmpeg output, Opus in TeamSpeak), so nothing gets resampled.
+for sink in tsbot:Mendil-Music devnull:Discard; do
+  pactl load-module module-null-sink "sink_name=${sink%%:*}" rate=48000 channels=2 format=s16le \
+    "sink_properties=device.description=${sink#*:}" >/dev/null
+done
 pactl set-default-sink devnull
 pactl set-default-source tsbot.monitor
 log "Xvfb and PulseAudio ready"

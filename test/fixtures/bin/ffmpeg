@@ -1,0 +1,6 @@
+#!/bin/sh
+# Fake ffmpeg for tests: consumes stdin; fails like the real one when there was no input.
+bytes=$(wc -c | tr -d ' ')
+if [ "$bytes" -gt 0 ]; then exit 0; fi
+echo "pipe:0: Invalid data found when processing input" >&2
+exit 1

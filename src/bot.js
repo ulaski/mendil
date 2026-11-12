@@ -1,10 +1,11 @@
+import fs from 'node:fs';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { ClientQuery } from './ts3/clientquery.js';
 import { Ts3ClientProcess } from './ts3/client-process.js';
 import { Player } from './player.js';
 import { createCommands } from './commands.js';
-import fs from 'node:fs';
 import { createI18n } from './i18n/index.js';
 import { chunkMessage, formatDuration, safe, stripBBCode, trackLink } from './format.js';
 
@@ -13,6 +14,28 @@ const QUERY_STARTUP_GRACE_MS = 90_000; // restart the client if ClientQuery neve
 const RECONNECT_MIN_MS = 30_000; // also how long an in-flight connection attempt is given
 const RECONNECT_MAX_MS = 5 * 60_000;
 const ERR_NOT_CONNECTED = 1794;
+
+// TS client restarts after a crash: 3 s, 6 s, 12 s … up to 2 min. If it keeps crashing,
+// exit so Docker restarts the whole container (Xvfb and PulseAudio included).
+const CLIENT_RESTART_MIN_MS = 3_000;
+const CLIENT_RESTART_MAX_MS = 2 * 60_000;
+const CLIENT_STABLE_MS = 10 * 60_000; // uptime after which the restart backoff resets
+const CLIENT_CRASH_WINDOW_MS = 5 * 60_000;
+const CLIENT_MAX_CRASHES = 5;
+
+// Minimum gap between outgoing chat messages, to stay clear of the server's anti-flood.
+const MESSAGE_GAP_MS = 300;
+
+/** True while a process exists and isn't a zombie (Xvfb is our child but never reaped). */
+export function isProcessAlive(pid) {
+  try {
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+    const state = stat.slice(stat.lastIndexOf(')') + 2, stat.lastIndexOf(')') + 3);
+    return state !== 'Z' && state !== 'X';
+  } catch {
+    return false;
+  }
+}
 
 // Touched while connected to the server; read by the Docker HEALTHCHECK (src/healthcheck.js).
 export const HEALTH_FILE = '/tmp/mendil.healthy';
@@ -31,6 +54,10 @@ export class Bot {
   #queryConnectTried = false;
   #transmitting = null;
   #resolvedHost = null;
+  #watchdogBusy = false;
+  #clientRestartDelay = CLIENT_RESTART_MIN_MS;
+  #clientCrashes = [];
+  #sendQueue = Promise.resolve();
 
   constructor(config, log) {
     this.config = config;
@@ -43,7 +70,7 @@ export class Bot {
     this.player = new Player({ ...config.player, log: log.child('player') });
     this.commands = createCommands(this);
 
-    this.client.on('exit', () => this.#restartClient('process exited'));
+    this.client.on('exit', () => this.#restartClient('process exited', { crash: true }));
     this.player.on('trackStart', (track) => {
       this.setTransmitting(true);
       if (config.bot.announceTracks) {
@@ -54,6 +81,9 @@ export class Bot {
     this.player.on('trackError', (track, message) => {
       this.sendChannel(t('playFailed', { title: safe(track.title), reason: safe(message) }));
     });
+    this.player.on('halted', (track, message) => {
+      this.sendChannel(t('playbackHalted', { reason: safe(message) }));
+    });
     this.player.on('idle', () => this.setTransmitting(false));
   }
 
@@ -61,13 +91,13 @@ export class Bot {
     await this.client.prepare();
     await this.player.init();
     await this.#startClient();
-    this.#watchdogTimer = setInterval(() => this.#watchdog(), WATCHDOG_INTERVAL_MS);
     await this.#watchdog();
+    this.#scheduleWatchdog();
   }
 
   async shutdown() {
     this.#stopping = true;
-    clearInterval(this.#watchdogTimer);
+    clearTimeout(this.#watchdogTimer);
     this.player.stop();
     try {
       if (this.#cq?.connected) await this.#cq.send('disconnect', { msg: this.i18n.t('shuttingDown') });
@@ -82,10 +112,24 @@ export class Bot {
   // TeamSpeak connection management
   // ---------------------------------------------------------------------------
 
+  /** Self-scheduling (not setInterval), so a slow run can never overlap the next one. */
+  #scheduleWatchdog() {
+    if (this.#stopping) return;
+    this.#watchdogTimer = setTimeout(async () => {
+      await this.#watchdog();
+      this.#scheduleWatchdog();
+    }, WATCHDOG_INTERVAL_MS);
+  }
+
   async #watchdog() {
-    if (this.#stopping || this.#restarting) return;
+    if (this.#stopping) return;
+    // Checked even while a client restart is pending, so a dead Xvfb/PulseAudio is noticed
+    // within one tick instead of after a series of doomed restarts.
+    if (!this.#checkSupportProcesses()) return;
+    if (this.#restarting || this.#watchdogBusy) return;
+    this.#watchdogBusy = true;
     try {
-      if (!this.client.running) return void (await this.#restartClient('process not running'));
+      if (!this.client.running) return void (await this.#restartClient('process not running', { crash: true }));
 
       if (!this.#cq?.connected) {
         try {
@@ -93,7 +137,7 @@ export class Bot {
         } catch (err) {
           const age = Date.now() - this.client.startedAt;
           this.log.debug(`ClientQuery not reachable yet: ${err.message}`);
-          if (age > QUERY_STARTUP_GRACE_MS) await this.#restartClient('ClientQuery unreachable');
+          if (age > QUERY_STARTUP_GRACE_MS) await this.#restartClient('ClientQuery unreachable', { crash: true });
           return;
         }
       }
@@ -101,19 +145,53 @@ export class Bot {
       await this.#checkServerConnection();
     } catch (err) {
       this.log.error('watchdog error:', err);
+    } finally {
+      this.#watchdogBusy = false;
     }
+  }
+
+  /**
+   * Xvfb and PulseAudio are started by the entrypoint and nobody else watches them. Without
+   * them nothing works, so exit and let Docker's restart policy rebuild the whole container.
+   */
+  #checkSupportProcesses() {
+    for (const [name, pid] of [['Xvfb', process.env.XVFB_PID], ['PulseAudio', process.env.PULSE_PID]]) {
+      if (pid && !isProcessAlive(Number(pid))) {
+        this.#fatal(`${name} (pid ${pid}) is not running`);
+        return false;
+      }
+    }
+    return true;
+  }
+
+  #fatal(reason) {
+    if (this.#stopping) return;
+    this.log.error(`${reason}; exiting so the container gets restarted`);
+    this.shutdown()
+      .catch(() => {})
+      .finally(() => process.exit(1));
   }
 
   async #connectQuery() {
     const cq = new ClientQuery({ port: this.config.ts3.queryPort, log: this.log.child('clientquery') });
-    await cq.connect(this.client.readApiKey());
-    cq.on('notify', (name, params) => this.#onNotify(name, params));
+    // Ignore events from any connection other than the current one, so a leaked or
+    // replaced connection can never run a chat command a second time.
+    cq.on('notify', (name, params) => {
+      if (this.#cq === cq) this.#onNotify(name, params);
+    });
     cq.on('close', () => {
       if (this.#cq === cq) this.log.warn('ClientQuery connection lost');
     });
-    for (const event of ['notifytextmessage', 'notifyconnectstatuschange', 'notifyclientmoved']) {
-      await cq.send('clientnotifyregister', { schandlerid: 0, event });
+    try {
+      await cq.connect(this.client.readApiKey());
+      for (const event of ['notifytextmessage', 'notifyconnectstatuschange', 'notifyclientmoved']) {
+        await cq.send('clientnotifyregister', { schandlerid: 0, event });
+      }
+    } catch (err) {
+      cq.close();
+      throw err;
     }
+    this.#cq?.close();
     this.#cq = cq;
     this.#status = 'unknown';
     this.log.info('ClientQuery connected');
@@ -210,16 +288,32 @@ export class Bot {
     await this.setTransmitting(this.player.isPlaying && !this.player.paused);
   }
 
-  async #restartClient(reason) {
+  /** @param {{crash?: boolean}} opts crash=true when the client itself failed (not the server) */
+  async #restartClient(reason, { crash = false } = {}) {
     if (this.#stopping || this.#restarting) return;
     this.#restarting = true;
     try {
-      this.log.warn(`restarting TeamSpeak client: ${reason}`);
+      let delay = CLIENT_RESTART_MIN_MS;
+      if (crash) {
+        const now = Date.now();
+        if (now - this.client.startedAt > CLIENT_STABLE_MS) this.#clientRestartDelay = CLIENT_RESTART_MIN_MS;
+        this.#clientCrashes = this.#clientCrashes.filter((t) => now - t < CLIENT_CRASH_WINDOW_MS);
+        this.#clientCrashes.push(now);
+        if (this.#clientCrashes.length > CLIENT_MAX_CRASHES) {
+          this.#fatal(`TeamSpeak client failed ${this.#clientCrashes.length} times in 5 minutes`);
+          return;
+        }
+        delay = this.#clientRestartDelay;
+        this.#clientRestartDelay = Math.min(this.#clientRestartDelay * 2, CLIENT_RESTART_MAX_MS);
+      }
+      this.log.warn(`restarting TeamSpeak client in ${Math.round(delay / 1000)}s: ${reason}`);
       this.#cq?.close();
       this.#cq = null;
       this.#status = 'disconnected';
+      this.#markHealthy(false);
       await this.client.stop();
-      await new Promise((r) => setTimeout(r, 3_000));
+      await sleep(delay);
+      if (this.#stopping || !this.#checkSupportProcesses()) return;
       await this.client.prepare();
       await this.#startClient();
     } catch (err) {
@@ -334,15 +428,21 @@ export class Bot {
     return this.#sendText({ targetmode: 2 }, text);
   }
 
-  async #sendText(target, text) {
-    if (!this.#cq?.connected) return;
-    for (const chunk of chunkMessage(text)) {
-      try {
-        await this.#cq.send('sendtextmessage', { ...target, msg: chunk });
-      } catch (err) {
-        this.log.warn('could not send message:', err.message);
-        return;
+  /** Messages go out one at a time with a small gap, in the order they were requested. */
+  #sendText(target, text) {
+    const job = this.#sendQueue.then(async () => {
+      for (const chunk of chunkMessage(text)) {
+        if (!this.#cq?.connected) return;
+        try {
+          await this.#cq.send('sendtextmessage', { ...target, msg: chunk });
+        } catch (err) {
+          this.log.warn('could not send message:', err.message);
+          return;
+        }
+        await sleep(MESSAGE_GAP_MS);
       }
-    }
+    });
+    this.#sendQueue = job.catch(() => {});
+    return job;
   }
 }
