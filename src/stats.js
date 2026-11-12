@@ -7,6 +7,7 @@ const WATCHED = {
   Xvfb: 'xvfb',
   pulseaudio: 'pulse',
   node: 'node',
+  'node-MainThread': 'node', // Node 26+ names its main thread
   ffmpeg: 'ffmpeg',
 };
 const CLOCK_TICKS = 100; // USER_HZ on Linux
