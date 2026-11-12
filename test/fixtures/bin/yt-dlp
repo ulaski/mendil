@@ -1,0 +1,22 @@
+#!/bin/sh
+# Fake yt-dlp for tests. Behaviour is chosen by the URL (last argument).
+for arg; do url=$arg; done
+case "$url" in
+  ok://quick)
+    printf 'audio-bytes'
+    ;;
+  ok://long)
+    # a child process, like the real yt-dlp's PyInstaller child / ffmpeg helpers
+    sleep 300 &
+    echo $! > "$FAKE_CHILD_PIDFILE"
+    while :; do printf 'audio-bytes'; sleep 0.1; done
+    ;;
+  fail://bot)
+    echo "ERROR: [youtube] abc: Sign in to confirm you're not a bot" >&2
+    exit 1
+    ;;
+  *)
+    echo "ERROR: [youtube] abc: Video unavailable" >&2
+    exit 1
+    ;;
+esac

@@ -2,6 +2,7 @@
 export default {
   nowPlaying: '▶ Çalıyor: {track} ({length}) — isteyen: {user}',
   playFailed: 'Çalınamadı: {title} — {reason}',
+  playbackHalted: 'Şarkılar art arda çalınamadığı için çalma durduruldu: {reason}. Kuyruk korunuyor — tekrar denemek için {prefix}resume.',
   live: 'canlı',
 
   unknownCommand: 'Bilinmeyen komut. {prefix}help yaz.',
@@ -60,7 +61,7 @@ export default {
     skip: 'Çalan şarkıyı geçer',
     stop: 'Durdurur ve kuyruğu temizler',
     pause: 'Duraklatır',
-    resume: 'Devam ettirir',
+    resume: 'Devam ettirir (hatalar yüzünden durduysa yeniden dener)',
     np: 'Şu an çalan şarkı',
     queue: 'Kuyruğu gösterir',
     remove: 'Kuyruktan şarkı siler',

@@ -20,8 +20,13 @@ services:
     image: ghcr.io/ulaski/mendil:latest
     platform: linux/amd64
     restart: unless-stopped
-    init: true
+    stop_grace_period: 20s
     shm_size: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
     depends_on: [teamspeak]
     environment:
       TS3CLIENT_LICENSE: accept

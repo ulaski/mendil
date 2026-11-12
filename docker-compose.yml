@@ -5,9 +5,14 @@ services:
     platform: linux/amd64 # the official TS3 client is x86_64 only
     container_name: mendil
     restart: unless-stopped
-    init: true
+    stop_grace_period: 20s # the bot disconnects cleanly before the TS client is stopped
     env_file: .env
     shm_size: 256m # Qt/Chromium inside the TS3 client uses /dev/shm
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
     volumes:
       - ts3client-data:/home/node/.ts3client # identity + settings
       - ts3client-bin:/opt/ts3client # downloaded TeamSpeak client
