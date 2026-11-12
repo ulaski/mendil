@@ -19,7 +19,7 @@ Mendil    ▶ Now playing: Daft Punk - Around The World (4:02) — requested by 
 
 ### Why "Mendil"?
 
-In Turkey, people at a *gazino* or *meyhane* used to write their song request on a *mendil*, a napkin, and pass it up to the musicians on stage. Mendil does the same for your TeamSpeak server. Write your request in chat and the band plays it. *(Pronounced men-DEEL.)*
+In Türkiye, people at a *gazino* or *meyhane* used to write their song request on a *mendil*, a napkin, and pass it up to the musicians on stage. Mendil does the same for your TeamSpeak server. Write your request in chat and the band plays it. *(Pronounced men-DEEL.)*
 
 ## Features
 
