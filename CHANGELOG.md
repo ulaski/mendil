@@ -5,8 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-13
+
+Security release. Everyone running 0.1.0 should update.
+
 ### Security
-- A crafted playlist or feed could make yt-dlp run a command inside the container: an entry whose "URL" was really a yt-dlp option was passed on unchecked. Entries must now be http(s) URLs, and every yt-dlp call ends its options with `--`. Please update.
+- A crafted playlist or feed could make yt-dlp run a command inside the container: an entry whose "URL" was really a yt-dlp option was passed on unchecked. Entries must now be http(s) URLs, and every yt-dlp call ends its options with `--`.
 - `!play` no longer opens addresses on private networks (localhost, LAN, cloud metadata). `ALLOW_PRIVATE_URLS=true` allows them again.
 - Passwords and API keys are masked in the debug log.
 - Links in chat messages are encoded so a crafted URL can't inject BBCode.
@@ -55,5 +59,6 @@ First public version of 🧻 Mendil.
 - A `stats:` log line every 10 minutes, and `/tmp/mendil-health.json` with connection details.
 - English and Turkish chat messages (`BOT_LANGUAGE`). Adding a language means translating one file.
 
-[Unreleased]: https://github.com/ulaski/mendil/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ulaski/mendil/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/ulaski/mendil/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/ulaski/mendil/releases/tag/v0.1.0
