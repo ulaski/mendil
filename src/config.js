@@ -92,6 +92,8 @@ export function loadConfig() {
       port: int(env.PANEL_PORT, 8080, { min: 0, max: 65535 }),
       host: env.PANEL_HOST || '0.0.0.0',
       password: env.PANEL_PASSWORD || '',
+      // Behind a reverse proxy, take the client address from X-Forwarded-For (for the login limit).
+      trustProxy: bool(env.PANEL_TRUST_PROXY, false),
     },
     ytdlp: {
       autoUpdate: bool(env.YTDLP_AUTO_UPDATE, true),

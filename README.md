@@ -249,6 +249,7 @@ All settings are environment variables, usually set in `.env`.
 | `VOICE_BACKEND` | `classic` | `classic` (official TeamSpeak client) or `native`, see [How it works](#how-it-works). The `native` image sets it for you. |
 | `NATIVE_BITRATE` | `128` | Native engine only: Opus bitrate in kbit/s, 48 to 192 |
 | `PANEL_PORT` | `8080` | Port of the web panel inside the container. `0` turns it off. |
+| `PANEL_TRUST_PROXY` | `false` | Set to `true` when the panel is behind a reverse proxy, so the login limit applies per client instead of to the proxy |
 | `PANEL_PASSWORD` | | Password for the web panel. If empty, one is generated on first start and printed in the log. |
 | `TS3_CLIENT_VERSION` | `3.6.2` | TeamSpeak client version to download |
 | `TS3_CLIENT_SHA256` | | Expected SHA-256 of that download. Known for 3.6.2; set it if you change the version. |

@@ -301,8 +301,14 @@ export class PanelServer {
     }
   }
 
+  /** The client's address. Behind a reverse proxy (PANEL_TRUST_PROXY) it's the last X-Forwarded-For hop. */
+  #clientIp(req) {
+    const forwarded = this.config.panel.trustProxy ? String(req.headers['x-forwarded-for'] ?? '').split(',').map((s) => s.trim()).filter(Boolean).pop() : null;
+    return forwarded || req.socket.remoteAddress || '?';
+  }
+
   async #login(req, res) {
-    const ip = req.socket.remoteAddress ?? '?';
+    const ip = this.#clientIp(req);
     const now = Date.now();
     const a = this.#attempts.get(ip);
     if (a && a.resetAt > now && a.count >= LOGIN_MAX_ATTEMPTS) return this.#json(res, 429, { ok: false, error: 'tooManyAttempts' });

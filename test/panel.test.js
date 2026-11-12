@@ -149,6 +149,19 @@ test('the event stream starts with the current state', async () => {
   assert.match(res.text, /^event: state\ndata: \{/);
 });
 
+test('behind a trusted proxy, the login limit is per client, not per proxy', async () => {
+  panel.config.panel.trustProxy = true;
+  const port = panel.port;
+  const attempt = (ip) => new Promise((resolve) => {
+    const req = http.request({ host: '127.0.0.1', port, path: '/api/login', method: 'POST', headers: { 'content-type': 'application/json', 'x-mendil': '1', 'x-forwarded-for': `1.2.3.4, ${ip}` } }, (res) => { res.resume(); res.on('end', () => resolve(res.statusCode)); });
+    req.end(JSON.stringify({ password: 'wrong' }));
+  });
+  for (let i = 0; i < 11; i++) await attempt('10.0.0.1');
+  assert.equal(await attempt('10.0.0.1'), 429);
+  assert.equal(await attempt('10.0.0.2'), 401, 'another client is not locked out');
+  panel.config.panel.trustProxy = false;
+});
+
 test('too many wrong passwords are rate limited', async () => {
   let last;
   for (let i = 0; i < 12; i++) last = await call('POST', '/api/login', { body: { password: `x${i}` } });
