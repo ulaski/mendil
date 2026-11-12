@@ -27,8 +27,9 @@ Read its license (https://www.teamspeak.com/en/privacy-and-terms/) and set TS3CL
   curl -fsSL -o "$tmp/ts3client.run" "$url" || die "download failed: $url"
   rm -rf "${TS3_CLIENT_DIR:?}/"* "${TS3_CLIENT_DIR}/".[!.]* 2>/dev/null || true
   # --accept: the license was accepted above via TS3CLIENT_LICENSE=accept
-  sh "$tmp/ts3client.run" --accept --noexec --nox11 --target "$TS3_CLIENT_DIR" >/dev/null \
-    || die "could not extract the TeamSpeak client"
+  # (its progress meter goes to stderr without newlines, so keep it out of the logs)
+  sh "$tmp/ts3client.run" --accept --noexec --nox11 --target "$TS3_CLIENT_DIR" >"$tmp/extract.log" 2>&1 \
+    || { cat "$tmp/extract.log"; die "could not extract the TeamSpeak client"; }
   rm -rf "$tmp"
   echo "$TS3_CLIENT_VERSION" > "$TS3_CLIENT_DIR/.installed-version"
   log "TeamSpeak client installed to $TS3_CLIENT_DIR"
@@ -42,7 +43,7 @@ fi
 # Leftovers from a previous run (/tmp survives container restarts): X lock files, the
 # health marker (must not report "healthy" before we reconnect), and yt-dlp's PyInstaller
 # extraction dirs (normally removed by yt-dlp itself, but not if it was killed hard).
-rm -rf /tmp/.X99-lock /tmp/.X11-unix/X99 /tmp/mendil.healthy /tmp/_MEI* 2>/dev/null || true
+rm -rf /tmp/.X99-lock /tmp/.X11-unix/X99 /tmp/mendil.healthy /tmp/mendil-health.json /tmp/mendil-cache /tmp/_MEI* 2>/dev/null || true
 
 # --- Virtual X display for the Qt client -----------------------------------
 Xvfb "${DISPLAY}" -screen 0 1024x768x16 -nolisten tcp >/tmp/xvfb.log 2>&1 &
@@ -73,10 +74,8 @@ pactl set-default-sink devnull
 pactl set-default-source tsbot.monitor
 log "Xvfb and PulseAudio ready"
 
-# --- yt-dlp self-update (YouTube changes often) -----------------------------
-if [ "${YTDLP_AUTO_UPDATE:-true}" = "true" ]; then
-  log "updating yt-dlp…"
-  timeout 60 yt-dlp -U 2>&1 | tail -n 1 || log "yt-dlp update failed, continuing with $(yt-dlp --version)"
-fi
+# yt-dlp is updated by the bot in the background (src/ytdlp-update.js), not here, so a slow
+# or broken update never delays startup.
+log "yt-dlp $(yt-dlp --version)"
 
 exec node /app/src/index.js

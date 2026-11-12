@@ -11,7 +11,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Xvfb + PulseAudio give the GUI client a virtual screen and a virtual sound card.
 # The lib* packages are runtime dependencies of the Qt-based TS3 client.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl ffmpeg procps sqlite3 tini \
+      ca-certificates curl ffmpeg procps sqlite3 tini python3 python3-venv \
       xvfb pulseaudio pulseaudio-utils \
       libasound2 libatomic1 libdbus-1-3 libdrm2 libegl1 libevent-2.1-7 libfontconfig1 libfreetype6 \
       libgbm1 libgl1 libglib2.0-0 libice6 libnss3 libpci3 libpulse0 libsm6 libxslt1.1 \
@@ -21,10 +21,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libxkbfile1 libxrandr2 libxshmfence1 libxss1 libxtst6 \
  && rm -rf /var/lib/apt/lists/*
 
-# yt-dlp standalone binary; owned by the runtime user so it can self-update (yt-dlp -U).
-RUN curl -fsSL -o /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux \
- && chmod 755 /usr/local/bin/yt-dlp \
- && chown node:node /usr/local/bin/yt-dlp
+# yt-dlp in a Python venv (one process per call, no self-extraction to /tmp), pinned in
+# docker/requirements.txt. Owned by the runtime user so the bot can update it at runtime.
+COPY docker/requirements.txt /opt/yt-dlp-requirements.txt
+RUN python3 -m venv /opt/yt-dlp \
+ && /opt/yt-dlp/bin/pip install --no-cache-dir --disable-pip-version-check -r /opt/yt-dlp-requirements.txt \
+ && ln -s /opt/yt-dlp/bin/yt-dlp /usr/local/bin/yt-dlp \
+ && chown -R node:node /opt/yt-dlp \
+ && yt-dlp --version
 
 WORKDIR /app
 COPY package.json ./
@@ -43,8 +47,10 @@ ENV HOME=/home/node \
 # The client's identity + settings. Persist it to keep the same TS3 identity (and server groups).
 VOLUME ["/home/node/.ts3client"]
 
+# Healthy while the bot is connected: it touches this file every 10 s (details in
+# /tmp/mendil-health.json).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=3m --retries=3 \
-  CMD ["node", "/app/src/healthcheck.js"]
+  CMD ["sh", "-c", "test $(( $(date +%s) - $(stat -c %Y /tmp/mendil.healthy 2>/dev/null || echo 0) )) -lt 60"]
 
 # tini as PID 1 reaps orphaned processes and forwards signals, also for plain `docker run`.
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]

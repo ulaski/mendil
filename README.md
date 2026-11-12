@@ -27,7 +27,8 @@ In Turkey, people at a *gazino* or *meyhane* used to write their song request on
 - 📝 **A real queue:** search & pick, play next, skip, pause, loop, shuffle and volume
 - 🔊 **Consistent loudness** between tracks, so nobody has to ride the volume
 - 🐳 **One container, two settings:** accept the TeamSpeak license, point it at your server, done
-- 🩹 **Recovers on its own** from crashes, kicks and server restarts
+- ⏭️ **No gaps between songs:** the next track is downloaded while the current one plays
+- 🩹 **Recovers on its own** from crashes, kicks, bans and server restarts, and **picks up where it left off** after a restart
 - 🌍 **Speaks your language:** English and Turkish built in, and [adding a language](CONTRIBUTING.md#adding-a-language) means translating one file
 - 🪶 **No npm dependencies:** the controller uses only the Node.js standard library
 
@@ -43,7 +44,8 @@ TeamSpeak chat ──► TS3 client ◄── ClientQuery (127.0.0.1:25639) ─�
 ```
 
 - **Xvfb** provides a virtual screen and **PulseAudio** a virtual sound card.
-- **yt-dlp** fetches the audio and **ffmpeg** plays it into the virtual card. The TeamSpeak client uses that card as its microphone.
+- **yt-dlp** downloads the audio (the next track while the current one plays) and **ffmpeg** plays it into the virtual card, at a loudness measured once per track. The TeamSpeak client uses that card as its microphone. Live streams and very long tracks are streamed instead.
+- The queue, the current position, loop mode and volume are saved, so a restart or update resumes where it stopped.
 - The controller reads chat through the client's **ClientQuery** plugin, replies, and only transmits while music is playing.
 - On first start, the license dialog, intro wizard and audio settings are pre-configured, so nobody needs to click through the GUI.
 
@@ -140,11 +142,13 @@ All settings are environment variables, usually set in `.env`.
 | `ALLOWED_UIDS` | | Comma-separated TS3 unique IDs allowed to control the bot. Empty means everyone. |
 | `ANNOUNCE_TRACKS` | `true` | Post "Now playing" messages |
 | `DEFAULT_VOLUME` | `70` | Start-up volume, 0–100 |
-| `NORMALIZE_AUDIO` | `true` | Loudness-normalise tracks (ffmpeg `loudnorm`) |
+| `NORMALIZE_AUDIO` | `true` | Loudness-normalise tracks to -16 LUFS |
 | `MAX_QUEUE` | `100` | Max queue length |
 | `MAX_PLAYLIST_ITEMS` | `50` | Max tracks taken from one playlist |
 | `MAX_TRACK_DURATION` | `0` | Max track length in seconds. `0` means unlimited. |
-| `YTDLP_AUTO_UPDATE` | `true` | Update yt-dlp on every container start |
+| `PREFETCH` | `true` | Download tracks before playing them (no gaps, robust against network hiccups). `false` streams everything. |
+| `PREFETCH_MAX_DURATION` | `1800` | Longer tracks (in seconds) and live streams are streamed instead of downloaded |
+| `YTDLP_AUTO_UPDATE` | `true` | Keep yt-dlp up to date in the background (daily, and when YouTube extraction breaks). A new version that fails a self-test is rolled back. |
 | `YTDLP_COOKIES_FILE` | | Cookies file for YouTube (see Troubleshooting) |
 | `TS3_CLIENT_VERSION` | `3.6.2` | TeamSpeak client version to download |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
@@ -156,7 +160,9 @@ git pull
 docker compose up -d --build     # or: docker compose pull && docker compose up -d
 ```
 
-yt-dlp updates itself on every start, so a `docker compose restart` is often enough when YouTube changes something.
+yt-dlp also updates itself in the background, daily and whenever YouTube extraction starts failing, so most YouTube changes need no action.
+
+The queue survives updates and restarts. It is stored with the bot's identity in the `ts3client-data` volume.
 
 ## Troubleshooting
 
@@ -178,7 +184,13 @@ YouTube sometimes blocks data-center IPs. Fix it like this:
 The channel codec is almost always the cause. Use Opus Music at quality 10.
 
 **Container is "unhealthy"**
-The health check passes while Mendil is connected to the server. Check the logs. Mendil retries with backoff, up to every 5 minutes.
+The health check passes while Mendil is connected to the server. `docker compose exec mendil cat /tmp/mendil-health.json` shows the details, and the logs say why it isn't connected. Mendil retries on its own: within seconds after a disconnect, 45 s after a kick, and after a ban has expired. If it can't connect for 20 minutes, it restarts itself.
+
+**Playback stopped with "tracks keep failing"**
+After 3 failed tracks in a row, or right away when YouTube blocks the bot, Mendil stops instead of skipping through the whole queue. Fix the cause (see the YouTube note above), then type `!resume`.
+
+**Resource usage**
+Every 10 minutes the log has a `stats:` line with CPU and memory per process and the gap/load times of recent tracks.
 
 ## FAQ
 
@@ -205,10 +217,15 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the end-to-end setup.
 ```
 docker/entrypoint.sh        downloads the TS3 client, starts Xvfb + PulseAudio, runs the bot
 src/index.js                entry point, signal handling
-src/bot.js                  connection management, watchdog, chat → commands
+src/bot.js                  connection management, watchdog, health, chat → commands
+src/reconnect.js            reconnect policy (backoff, kicks, bans), unit-tested with a fake clock
 src/commands.js             chat commands
-src/player.js               queue and playback (yt-dlp | ffmpeg → PulseAudio)
+src/player.js               queue and playback (file or yt-dlp stream → ffmpeg → PulseAudio)
+src/prefetch.js             downloads upcoming tracks and measures their loudness
+src/state.js                saves/restores the queue across restarts
+src/stats.js                periodic CPU/memory/timing log line
 src/ytdlp.js                resolves links, playlists and searches
+src/ytdlp-update.js         background yt-dlp updates with self-test and rollback
 src/i18n/                   chat messages per language
 src/ts3/client-process.js   runs the TS3 client and pre-configures settings.db
 src/ts3/clientquery.js      ClientQuery (telnet) client
