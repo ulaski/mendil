@@ -53,9 +53,12 @@ Read its license (https://www.teamspeak.com/en/privacy-and-terms/) and set TS3CL
 }
 
 # Leftovers from a previous run (/tmp survives container restarts): X lock files, the
-# health marker (must not report "healthy" before we reconnect), and yt-dlp's PyInstaller
-# extraction dirs (normally removed by yt-dlp itself, but not if it was killed hard).
-rm -rf /tmp/.X99-lock /tmp/.X11-unix/X99 /tmp/mendil.healthy /tmp/mendil-health.json /tmp/mendil-cache /tmp/_MEI* 2>/dev/null || true
+# health marker (must not report "healthy" before we reconnect), yt-dlp's PyInstaller
+# extraction dirs (normally removed by yt-dlp itself, but not if it was killed hard), and
+# PulseAudio's runtime dir. Its pid file names a PID that now belongs to another process,
+# so "pulseaudio --start" would think it is already running and not start.
+rm -rf /tmp/.X99-lock /tmp/.X11-unix/X99 /tmp/mendil.healthy /tmp/mendil-health.json /tmp/mendil-cache /tmp/_MEI* \
+  /tmp/pulse-* "$HOME"/.config/pulse/*-runtime 2>/dev/null || true
 
 VOICE_BACKEND="$(echo "${VOICE_BACKEND:-classic}" | tr '[:upper:]' '[:lower:]')"
 if [ "$VOICE_BACKEND" = "native" ]; then
@@ -78,7 +81,6 @@ export XVFB_PID=$!
 # --- PulseAudio ---------------------------------------------------------------
 # "tsbot"   : ffmpeg plays music into this sink; its monitor is the client's microphone.
 # "devnull" : default output, so the client never feeds what it hears back into the mic.
-pulseaudio --kill >/dev/null 2>&1 || true
 pulseaudio --start --exit-idle-time=-1 --log-target=stderr 2>/tmp/pulseaudio.log
 
 for _ in $(seq 1 50); do
