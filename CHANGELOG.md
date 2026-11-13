@@ -5,6 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+- The native image uses a static ffmpeg build ([wader/static-ffmpeg](https://github.com/wader/static-ffmpeg), pinned by digest) instead of Debian's, which brought ~400 MB of shared libraries with it. The image shrinks from 284 MB to 185 MB compressed (1.12 GB to 740 MB unpacked). The classic image keeps Debian's ffmpeg, because it plays into PulseAudio.
+
 ### Fixed
 - The native engine's "from source" instructions built an untagged image, so Compose pulled the published one instead; the README now adds a `build` section. `.env.example` no longer sets `VOICE_BACKEND`, which had overridden the native image's engine.
 

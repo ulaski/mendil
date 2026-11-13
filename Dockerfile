@@ -10,11 +10,15 @@
 # The classic image contains the native engine too (VOICE_BACKEND=native).
 
 # Pinned; Dependabot (.github/dependabot.yml) proposes updates.
+# Static ffmpeg for the native image (https://github.com/wader/static-ffmpeg). Debian's ffmpeg
+# drags in ~400 MB of shared libraries (LLVM, Mesa, ...); one static binary is ~100 MB.
+FROM mwader/static-ffmpeg:9.0.2-1@sha256:f5d100184884eb3e82b0eb14bb5ebf98da99826ac824989720297fb9ef21c822 AS static-ffmpeg
+
 FROM node:26.13.0-bookworm-slim AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl ffmpeg procps tini python3 python3-venv \
+      ca-certificates curl procps tini python3 python3-venv \
  && rm -rf /var/lib/apt/lists/*
 
 # yt-dlp in a Python venv (one process per call, no self-extraction to /tmp), pinned in
@@ -55,6 +59,7 @@ ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]
 
 # --- native: no TeamSpeak client ------------------------------------------------------------
 FROM base AS native
+COPY --from=static-ffmpeg /ffmpeg /usr/local/bin/ffmpeg
 USER node
 ENV VOICE_BACKEND=native
 
@@ -62,9 +67,10 @@ ENV VOICE_BACKEND=native
 FROM base AS classic
 
 # Xvfb + PulseAudio give the GUI client a virtual screen and a virtual sound card.
-# The lib* packages are runtime dependencies of the Qt-based TS3 client.
+# The lib* packages are runtime dependencies of the Qt-based TS3 client. Debian's ffmpeg,
+# because the classic engine plays into PulseAudio, which the static build can't.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      sqlite3 xvfb pulseaudio pulseaudio-utils \
+      ffmpeg sqlite3 xvfb pulseaudio pulseaudio-utils \
       libasound2 libatomic1 libdbus-1-3 libdrm2 libegl1 libevent-2.1-7 libfontconfig1 libfreetype6 \
       libgbm1 libgl1 libglib2.0-0 libice6 libnss3 libpci3 libpulse0 libsm6 libxslt1.1 \
       libxcb-glx0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \

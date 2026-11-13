@@ -47,6 +47,7 @@ ServerQuery can't send audio, so a bot has to connect to TeamSpeak as a real cli
 | Image | `ghcr.io/ulaski/mendil:latest` | `ghcr.io/ulaski/mendil:native` |
 | CPU | x86_64 only (ARM via slow emulation) | x86_64 and ARM64 (e.g. Raspberry Pi) |
 | Memory | about 300 MB | about 80 MB |
+| Download size | about 310 MB, plus the TeamSpeak client (~110 MB) on first start | about 185 MB |
 | Channel codec | needs Opus Music for good sound | plays in stereo in any channel |
 | Why a connection was refused | not reported by the client | logged (wrong password, ban, security level…) |
 | TeamSpeak 6 servers | works (TS3 client on a TS6 server) | works |
