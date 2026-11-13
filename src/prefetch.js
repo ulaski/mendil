@@ -59,7 +59,8 @@ export class Prefetcher {
   }
 
   eligible(track) {
-    return Boolean(track) && !track.isLive && Number.isFinite(track.duration) && track.duration > 0
+    // A Spotify song not looked up yet has no playable URL.
+    return Boolean(track) && !track.search && !track.isLive && Number.isFinite(track.duration) && track.duration > 0
       && track.duration <= this.maxDuration;
   }
 

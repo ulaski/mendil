@@ -20,7 +20,7 @@ export default {
   slowDown: 'Biraz yavaş: birkaç saniye sonra tekrar dene.',
   blockedUrl: 'Bu adres özel bir ağda, o yüzden açmıyorum.',
 
-  usagePlay: 'Kullanım: {prefix}play <YouTube linki veya arama>',
+  usagePlay: 'Kullanım: {prefix}play <YouTube ya da Spotify linki, veya arama>',
   queueFull: 'Kuyruk dolu (en fazla {max} şarkı).',
   notFound: 'Bulunamadı: {reason}',
   tooLong: 'Şarkı çok uzun (en fazla {max}).',
@@ -69,7 +69,7 @@ export default {
 
   commandsTitle: 'Komutlar:',
   help: {
-    play: 'Çalar veya kuyruğun sonuna ekler (YouTube linki, oynatma listesi ya da arama)',
+    play: 'Çalar veya kuyruğun sonuna ekler (YouTube ya da Spotify linki, çalma listesi, albüm ya da arama)',
     playnext: 'Kuyruğun en başına ekler',
     search: "YouTube'da arar, 5 sonuç listeler",
     pick: '{prefix}search sonucundan seçip kuyruğa ekler',

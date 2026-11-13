@@ -27,7 +27,9 @@ export const MAX_CONSECUTIVE_FAILURES = 3;
 export const LOOP_MODES = ['off', 'one', 'all'];
 
 // startAt: where a restored track resumes (seconds); only set on queued tracks.
-const TRACK_FIELDS = ['title', 'url', 'duration', 'isLive', 'requestedBy', 'requesterUid', 'startAt'];
+// search: YouTube search terms of a Spotify song not looked up yet (its url is the Spotify link).
+const TRACK_FIELDS = ['title', 'url', 'duration', 'isLive', 'requestedBy', 'requesterUid', 'search', 'startAt'];
+const MAX_LOOKUPS = 200;
 /** The persistent part of a track (no runtime fields like position or retries). */
 export const plainTrack = (t) => Object.fromEntries(TRACK_FIELDS.filter((k) => t[k] !== undefined).map((k) => [k, t[k]]));
 
@@ -83,6 +85,7 @@ const pushMetric = (list, value) => {
  *  - 'idle'                        nothing is playing any more
  */
 export class Player extends EventEmitter {
+  #lookups = new Map(); // Spotify song -> YouTube lookup (promise)
   queue = [];
   current = null;
   loop = 'off';
@@ -99,7 +102,7 @@ export class Player extends EventEmitter {
   #failures = 0;
   #lastEndAt = 0;
 
-  constructor({ sink, output, defaultVolume, normalize, cookiesFile, cacheDir, proxy, maxTrackDuration = 0, prefetcher = null, log, bin = {}, timing = {} }) {
+  constructor({ sink, output, defaultVolume, normalize, cookiesFile, cacheDir, proxy, maxTrackDuration = 0, prefetcher = null, resolver = null, log, bin = {}, timing = {} }) {
     super();
     this.output = output ?? { kind: 'pulse', sink };
     this.volume = defaultVolume;
@@ -107,6 +110,7 @@ export class Player extends EventEmitter {
     this.ytOpts = { cookiesFile, cacheDir, proxy };
     this.maxTrackDuration = maxTrackDuration;
     this.prefetcher = prefetcher;
+    this.resolver = resolver; // async (track with `search`) -> { url, duration }
     this.log = log;
     this.bin = { ytdlp: 'yt-dlp', ffmpeg: 'ffmpeg', ...bin };
     this.timing = { ...DEFAULT_TIMING, ...timing };
@@ -260,7 +264,32 @@ export class Player extends EventEmitter {
   }
 
   #syncPrefetch() {
+    // Look up the next Spotify song while this one plays, so it can be prefetched too.
+    if (this.queue[0]?.search) this.#resolveAhead(this.queue[0]);
     this.prefetcher?.want([this.current, this.queue[0]].filter(Boolean));
+  }
+
+  /** One lookup per song, shared by the look-ahead and #load; failures are retried later. */
+  #lookup(track) {
+    const key = `${track.search}|${track.url}`;
+    if (!this.#lookups.has(key)) {
+      if (this.#lookups.size >= MAX_LOOKUPS) this.#lookups.delete(this.#lookups.keys().next().value);
+      const promise = Promise.resolve().then(() => {
+        if (!this.resolver) throw new Error('cannot look up songs');
+        return this.resolver(track);
+      });
+      promise.catch(() => this.#lookups.delete(key));
+      this.#lookups.set(key, promise);
+    }
+    return this.#lookups.get(key);
+  }
+
+  #resolveAhead(track) {
+    this.#lookup(track).then((found) => {
+      if (!track.search) return;
+      Object.assign(track, found, { search: undefined });
+      if (this.queue[0] === track) this.#syncPrefetch();
+    }, () => {}); // tried again, and reported, when it is its turn
   }
 
   #playNext() {
@@ -282,6 +311,19 @@ export class Player extends EventEmitter {
     const session = ++this.#session;
     this.#syncPrefetch();
     this.log.info(`loading: ${track.title} <${track.url}>`);
+    if (track.search) {
+      let found;
+      try {
+        found = await this.#lookup(track);
+      } catch (err) {
+        if (session === this.#session) this.#advance({ error: err.message, global: isGlobalError(err.message) });
+        return;
+      }
+      if (session !== this.#session) return;
+      Object.assign(track, found, { search: undefined });
+      this.log.info(`found on YouTube: <${track.url}>`);
+      this.#syncPrefetch();
+    }
     let source = null;
     if (this.prefetcher?.eligible(track)) {
       const res = await this.prefetcher.ensure(track);

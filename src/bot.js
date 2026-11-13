@@ -69,7 +69,10 @@ export class Bot {
     const prefetcher = p.prefetch
       ? new Prefetcher({ dir: p.prefetchDir, cookiesFile: p.cookiesFile, cacheDir: p.cacheDir, proxy: p.proxy, maxDuration: p.prefetchMaxDuration, normalize: p.normalize, log: log.child('prefetch') })
       : null;
-    this.player = new Player({ ...p, output: this.voice.audio, prefetcher, log: log.child('player') });
+    this.player = new Player({
+      ...p, output: this.voice.audio, prefetcher, log: log.child('player'),
+      resolver: (track) => this.requests.findOnYoutube(track), // Spotify songs -> YouTube
+    });
     this.state = new StateStore(path.join(config.dataDir, 'state.json'), log.child('state'));
     this.updater = new YtdlpUpdater({
       enabled: config.ytdlp.autoUpdate,

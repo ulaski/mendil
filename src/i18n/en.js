@@ -24,7 +24,7 @@ export default {
   blockedUrl: "That address is on a private network, so I won't open it.",
 
   // play / queue
-  usagePlay: 'Usage: {prefix}play <YouTube link or search terms>',
+  usagePlay: 'Usage: {prefix}play <YouTube or Spotify link, or search terms>',
   queueFull: 'The queue is full (max {max} tracks).',
   notFound: 'Not found: {reason}',
   tooLong: 'That track is too long (max {max}).',
@@ -80,7 +80,7 @@ export default {
   // help
   commandsTitle: 'Commands:',
   help: {
-    play: 'Play or add to the end of the queue (YouTube link, playlist or search)',
+    play: 'Play or add to the end of the queue (YouTube or Spotify link, playlist, album or search)',
     playnext: 'Add to the front of the queue',
     search: 'Search YouTube and list 5 results',
     pick: 'Queue a result from {prefix}search',

@@ -16,13 +16,13 @@ const fastTiming = { watchIntervalMs: 50, stallMs: 600, startTimeoutMs: { file: 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'mendil-test-'));
 
 /** Player with fakes; records events and every fake yt-dlp/ffmpeg invocation. */
-function setup({ prefetch = false, normalize = false } = {}) {
+function setup({ prefetch = false, normalize = false, resolver = null } = {}) {
   const dir = tmp();
   process.env.FAKE_LOG = path.join(dir, 'calls.log');
   const prefetcher = prefetch
     ? new Prefetcher({ dir: path.join(dir, 'cache'), normalize, log: quietLog, bin })
     : null;
-  const player = new Player({ sink: 'test', defaultVolume: 50, normalize, log: quietLog, bin, prefetcher, timing: fastTiming });
+  const player = new Player({ sink: 'test', defaultVolume: 50, normalize, log: quietLog, bin, prefetcher, resolver, timing: fastTiming });
   const events = [];
   for (const name of ['trackStart', 'trackError', 'halted', 'idle']) {
     player.on(name, (track) => events.push([name, track?.url]));
@@ -275,4 +275,22 @@ test('opus output: changing the volume restarts the track where it is, with the 
   assert.match(second, /volume=0\.40/);
   assert.equal(started, 1, 'not announced again');
   player.dispose();
+});
+
+test('Spotify songs are looked up on YouTube when they come up, the next one ahead of time', async () => {
+  const lookups = [];
+  const resolver = async (t) => {
+    lookups.push(t.search);
+    if (t.search === 'Nobody - Nothing') throw new Error('not found on YouTube');
+    return { url: `ok://${t.search.split(' - ')[1].toLowerCase()}`, duration: 1 };
+  };
+  const { player, events, calls } = setup({ resolver });
+  const spotify = (search) => ({ title: search, url: 'https://open.spotify.com/track/x', duration: 1, search });
+  player.add([spotify('Fontaines D.C. - Mimesis'), spotify('Nobody - Nothing'), spotify('Fontaines D.C. - Bug')]);
+  await waitFor(() => names(events).includes('idle'));
+  assert.deepEqual(events, [
+    ['trackStart', 'ok://mimesis'], ['trackError', 'https://open.spotify.com/track/x'], ['trackStart', 'ok://bug'], ['idle', undefined],
+  ]);
+  assert.ok(!calls().some((c) => c.args?.includes('https://open.spotify.com/track/x')), 'the Spotify link itself is never played');
+  assert.equal(lookups.filter((l) => l === 'Fontaines D.C. - Mimesis').length, 1, 'one lookup per song');
 });

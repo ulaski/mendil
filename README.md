@@ -25,7 +25,7 @@ In Türkiye, people at a *gazino* or *meyhane* used to write their song request 
 
 ## Features
 
-- 🎵 Plays YouTube links, whole playlists, or the first result for a search
+- 🎵 Plays YouTube links, whole playlists, or the first result for a search. Spotify songs, albums and playlists work too: Mendil finds each song on YouTube.
 - 📝 Has a proper queue: search and pick, play next, skip, pause, loop, shuffle and volume
 - 🔊 Keeps every track at the same loudness, so nobody has to ride the volume
 - 🐳 Runs as one container. You accept the TeamSpeak license and give it your server's address.
@@ -212,7 +212,7 @@ Mendil reads its own channel's chat and private messages sent to it. In private 
 
 | Command | Aliases | Description |
 |---|---|---|
-| `!play <link \| search>` | `!p` | Play now, or add to the end of the queue. Accepts a YouTube link, a playlist or search terms. |
+| `!play <link \| search>` | `!p` | Play now, or add to the end of the queue. Accepts a YouTube link, a playlist, a Spotify song, album or playlist link, or search terms. |
 | `!playnext <link \| search>` 🔒 | `!pn` | Add to the front of the queue |
 | `!search <search>` | `!find` | Show the top 5 YouTube results |
 | `!pick <number>` | | Queue a result from `!search` |
@@ -345,7 +345,9 @@ Yes, with both engines. Tested with TS6 server 6.0.0-beta13.1: commands, announc
 TeamSpeak has announced that TS3 reaches end-of-life at the end of 2027, but hasn't said what that means for TS3 clients on TS6 servers. If the TS3 client stops working with TS6 servers, the native engine doesn't depend on it.
 
 **Spotify / SoundCloud?**
-yt-dlp supports SoundCloud and many other sites, and direct links usually work. Spotify doesn't serve audio to third parties.
+Paste a Spotify song, album or playlist link (`open.spotify.com/...` or `spotify.link/...`). Spotify doesn't let anyone else play its audio, so Mendil reads the song list from Spotify's public embed page (no account or API key needed) and plays each song from YouTube. It picks the result whose length matches Spotify's, so it usually gets the album version rather than a music video. The lookup happens just before a song plays, so a long playlist joins the queue at once. Spotify's page lists at most about 100 songs of a playlist, and `MAX_PLAYLIST_ITEMS` still applies. Private playlists can't be read.
+
+yt-dlp supports SoundCloud and many other sites, and direct links usually work.
 
 **Who can use the bot?**
 By default everyone who can write to it, and `!play` takes links to any site yt-dlp supports. Name admins with `ADMIN_UIDS` or `ADMIN_GROUPS` so only they control playback ([Roles](#roles)), and on a public server limit who can use it at all with `ALLOWED_UIDS` or `ALLOWED_GROUPS`. Each user can start a few searches at once and then one every few seconds, so one person can't keep the bot busy for everyone.

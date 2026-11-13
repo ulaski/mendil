@@ -1,4 +1,5 @@
 import { isYoutubeBlock, resolveTracks, searchTracks } from './ytdlp.js';
+import { isSpotifyInput, pickYoutubeMatch, resolveSpotify } from './spotify.js';
 
 /**
  * Song requests, shared by chat commands and the web panel. Results are plain objects;
@@ -6,6 +7,7 @@ import { isYoutubeBlock, resolveTracks, searchTracks } from './ytdlp.js';
  *
  * request() resolves to one of:
  *   { ok: true, added: [tracks], position, wasIdle, playlistTitle, tooLong }
+ * Spotify links become tracks with `search` set (see spotify.js); findOnYoutube() resolves them.
  *   { ok: false, error: 'empty' | 'queueFull' | 'busy' | 'blockedUrl' | 'youtubeBlocked'
  *                       | 'notFound' | 'tooLong' | 'noResults', reason? }
  */
@@ -41,13 +43,27 @@ export function createRequests(bot) {
     if (player.queue.length >= config.player.maxQueue) return { ok: false, error: 'queueFull' };
     let result;
     try {
-      const started = Date.now();
-      result = await resolveTracks(input, config.player);
-      bot.recordResolve?.(Date.now() - started);
+      if (isSpotifyInput(input)) {
+        // Only the song list comes from Spotify; each song is looked up on YouTube just before it plays.
+        const spotify = await resolveSpotify(input);
+        result = { tracks: spotify.tracks.slice(0, config.player.maxPlaylistItems), playlistTitle: spotify.title };
+      } else {
+        const started = Date.now();
+        result = await resolveTracks(input, config.player);
+        bot.recordResolve?.(Date.now() - started);
+      }
     } catch (err) {
       return failure(err);
     }
     return admit(result.tracks, { front, requestedBy, requesterUid, playlistTitle: result.playlistTitle });
+  }
+
+  /** The YouTube version of a Spotify song (a track with `search`): { url, duration }. */
+  async function findOnYoutube(track) {
+    const results = await searchTracks(track.search, { ...config.player, count: 3 });
+    const match = pickYoutubeMatch(results, track.duration);
+    if (!match) throw new Error('not found on YouTube');
+    return { url: match.url, duration: match.duration ?? track.duration };
   }
 
   /** The top YouTube results for some search terms: { ok, results } or a failure. */
@@ -63,5 +79,5 @@ export function createRequests(bot) {
     }
   }
 
-  return { request, admit, search };
+  return { request, admit, search, findOnYoutube };
 }

@@ -5,6 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- **Spotify links.** `!play` and the panel take Spotify song, album and playlist links (also `spotify.link` short links). Mendil reads the song list from Spotify's public embed page, without an account or API key, and plays each song from YouTube, choosing the result whose length matches Spotify's. Songs are looked up just before they play, the next one ahead of time, so a playlist joins the queue at once and songs still follow each other without a gap.
+
 ## [0.3.0] - 2026-11-13
 
 Roles for admins and listeners, web panel sign-in with TeamSpeak, and a smaller native image.
