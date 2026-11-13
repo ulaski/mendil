@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-13
+
+Unraid templates and a Pterodactyl egg.
+
 ### Added
 - **Unraid templates** (`examples/unraid/`), for the Classic and the Native engine, with the data in appdata.
 - **Pterodactyl egg** (`examples/pterodactyl/egg-mendil.json`), with the Native engine. Pelican imports it too.
@@ -145,7 +149,8 @@ First public version of 🧻 Mendil.
 - A `stats:` log line every 10 minutes, and `/tmp/mendil-health.json` with connection details.
 - English and Turkish chat messages (`BOT_LANGUAGE`). Adding a language means translating one file.
 
-[Unreleased]: https://github.com/ulaski/mendil/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/ulaski/mendil/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/ulaski/mendil/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/ulaski/mendil/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/ulaski/mendil/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/ulaski/mendil/compare/v0.5.0...v0.6.0
