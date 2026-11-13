@@ -369,6 +369,14 @@ export class NativeBackend extends EventEmitter {
     return { moved: true };
   }
 
+  async findClientByName(nickname) {
+    const want = nickname.toLowerCase();
+    for (const c of this.#client.view.clients.values()) {
+      if (c.type === 0 && c.id !== this.#client.clientID && (c.nickname ?? '').toLowerCase() === want) return String(c.id);
+    }
+    return null;
+  }
+
   async clientInfo(clid) {
     const c = this.#client.view.clients.get(asClientID(Number(clid)));
     if (!c) throw new Error(`client ${clid} is not in view`);

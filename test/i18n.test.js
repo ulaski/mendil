@@ -68,7 +68,7 @@ for (const lang of Object.keys(LANGUAGES)) {
   test(`${lang}: help lists every command with a description`, async () => {
     const bot = fakeBot(lang);
     let reply = '';
-    await createCommands(bot).get('help').run({ reply: (m) => (reply = m) }, '');
+    await createCommands(bot).get('help').run({ user: { role: 'admin' }, reply: (m) => (reply = m) }, '');
     assert.ok(!/help\.\w+/.test(reply), reply); // no missing translation keys
     assert.ok(reply.includes('!play'));
   });

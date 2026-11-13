@@ -45,7 +45,7 @@ function makeBot({ bot: botOpts = {}, voice = new FakeVoice() } = {}) {
     dataDir: dir,
     voice: { backend: 'native', bitrate: 128 },
     ts3: { host: 'ts.example', port: 9987, nickname: 'Mendil', channel: '', serverPassword: '', channelPassword: '' },
-    bot: { language: 'en', prefix: '!', allowedUids: [], allowedGroups: [], channelHints: true, announceTracks: true, ...botOpts },
+    bot: { language: 'en', prefix: '!', allowedUids: [], allowedGroups: [], adminUids: [], adminGroups: [], channelHints: true, announceTracks: true, ...botOpts },
     player: { sink: 'x', defaultVolume: 70, normalize: false, maxQueue: 100, maxPlaylistItems: 50, maxTrackDuration: 0,
       cookiesFile: '', proxy: '', cacheDir: dir, prefetch: false, prefetchDir: path.join(dir, 'cache'), prefetchMaxDuration: 1800, allowPrivateUrls: false },
     ytdlp: { autoUpdate: false, venv: dir },
@@ -99,6 +99,42 @@ test('ALLOWED_GROUPS: others are refused, but !whoami and !help still work', asy
   voice.say('!vol');
   await sentCount(voice, 3);
   assert.equal(voice.sent[2].chunk, 'Volume: 70%');
+});
+
+test('roles in chat: listeners request and manage their own songs only', async () => {
+  const { bot, voice } = makeBot({ bot: { adminUids: ['uid-9'] } });
+  voice.connect();
+  bot.player.skip = () => true; // no real playback in this test
+  voice.say('!stop');
+  await sentCount(voice, 1);
+  assert.match(voice.sent[0].chunk, /Only admins/);
+  voice.say('!vol');
+  await sentCount(voice, 2);
+  assert.equal(voice.sent[1].chunk, 'Volume: 70%', 'listeners may look');
+  voice.say('!vol 20');
+  await sentCount(voice, 3);
+  assert.match(voice.sent[2].chunk, /Only admins/);
+
+  bot.player.current = { title: 'Theirs', url: 'https://t', requesterUid: 'uid-8' };
+  voice.say('!skip');
+  await sentCount(voice, 4);
+  assert.match(voice.sent[3].chunk, /songs you requested/);
+  bot.player.current = { title: 'Mine', url: 'https://m', requesterUid: 'uid-7' };
+  voice.say('!skip');
+  await sentCount(voice, 5);
+  assert.match(voice.sent[4].chunk, /Mine/);
+
+  voice.say('!help');
+  await sentCount(voice, 6);
+  assert.ok(!voice.sent[5].chunk.includes('!stop'), 'help leaves out admin commands');
+  voice.say('!whoami');
+  await sentCount(voice, 7);
+  assert.match(voice.sent[6].chunk, /role: listener/);
+
+  voice.say('!stop', { clid: '9' });
+  await sentCount(voice, 8);
+  assert.match(voice.sent[7].chunk, /Stopped/);
+  bot.player.current = null;
 });
 
 test('each user gets a few lookups at once, then is asked to slow down', async () => {

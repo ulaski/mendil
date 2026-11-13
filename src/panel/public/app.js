@@ -4,6 +4,12 @@ const STRINGS = {
     passwordLabel: 'Panel password', signIn: 'Sign in', signOut: 'Sign out',
     passwordHint: "The password is in the bot's log on first start, or set it with PANEL_PASSWORD.",
     wrongPassword: "That password didn't work.", tooManyAttempts: 'Too many attempts. Try again in a few minutes.',
+    nicknameLabel: 'Your TeamSpeak nickname', sendCode: 'Send me a code',
+    sendCodeHint: 'Mendil sends the code to you in a private TeamSpeak message. You need to be on the server.',
+    codeLabel: 'The code Mendil sent {name}', otherNickname: 'Use a different nickname',
+    usePassword: 'Sign in with the panel password', useTeamspeak: 'Sign in with TeamSpeak',
+    teamspeakOfflineHint: "Mendil isn't connected to TeamSpeak right now, so only the panel password works.",
+    signedInAs: 'Signed in as {name}',
     lampOn: 'ON AIR', lampPaused: 'PAUSED', lampOff: 'OFF AIR', lampOffline: 'NO SIGNAL',
     nothingPlaying: 'Nothing on air', requestedBy: 'requested by {name}', live: 'live', left: '{time} left',
     pause: 'Pause', resume: 'Resume', start: 'Start', skip: 'Skip', stop: 'Stop', volume: 'Volume',
@@ -28,12 +34,23 @@ const STRINGS = {
       notFound: "Couldn't play that: {reason}", tooLong: 'That track is longer than the server allows.', noResults: 'Nothing found.',
       nothingPlaying: 'Nothing is on air.', notPaused: 'Nothing to resume.', queueChanged: 'The running order changed. Try again.',
       offline: "Can't reach Mendil. Is the bot running?", generic: "That didn't work ({error}).",
+      adminOnly: 'Only admins can do that.', notYours: 'You can only skip or remove songs you requested.',
+      notOnline: "Nobody with that nickname is on the server. Check the spelling, or join first.",
+      notAllowed: "You're not allowed to use this bot.", codeRecentlySent: 'A code was sent a moment ago. Check your TeamSpeak chat, or wait half a minute.',
+      wrongCode: "That code didn't match.", codeExpired: 'That code has expired. Ask for a new one.',
+      teamspeakOffline: "Mendil isn't connected to TeamSpeak right now. Use the panel password.",
     },
   },
   tr: {
     passwordLabel: 'Panel şifresi', signIn: 'Giriş yap', signOut: 'Çıkış yap',
     passwordHint: "Şifre, ilk açılışta botun log'unda yazar; PANEL_PASSWORD ile kendin de belirleyebilirsin.",
     wrongPassword: 'Şifre yanlış.', tooManyAttempts: 'Çok fazla deneme oldu. Birkaç dakika sonra tekrar dene.',
+    nicknameLabel: 'TeamSpeak takma adın', sendCode: 'Bana kod gönder',
+    sendCodeHint: 'Mendil kodu sana TeamSpeak üzerinden özel mesajla gönderir. Sunucuda olman gerekiyor.',
+    codeLabel: "Mendil'in {name} için gönderdiği kod", otherNickname: 'Başka bir takma ad kullan',
+    usePassword: 'Panel şifresiyle giriş yap', useTeamspeak: 'TeamSpeak ile giriş yap',
+    teamspeakOfflineHint: "Mendil şu an TeamSpeak'e bağlı değil, o yüzden sadece panel şifresiyle girilebilir.",
+    signedInAs: '{name} olarak giriş yapıldı',
     lampOn: 'YAYINDA', lampPaused: 'DURDU', lampOff: 'YAYIN DIŞI', lampOffline: 'SİNYAL YOK',
     nothingPlaying: 'Yayında bir şey yok', requestedBy: 'isteyen: {name}', live: 'canlı', left: 'kalan {time}',
     pause: 'Duraklat', resume: 'Devam et', start: 'Başlat', skip: 'Geç', stop: 'Durdur', volume: 'Ses',
@@ -58,12 +75,20 @@ const STRINGS = {
       notFound: 'Çalınamadı: {reason}', tooLong: 'Bu parça sunucunun izin verdiğinden uzun.', noResults: 'Bir şey bulunamadı.',
       nothingPlaying: 'Yayında bir şey yok.', notPaused: 'Devam ettirilecek bir şey yok.', queueChanged: 'Yayın akışı değişti. Tekrar dene.',
       offline: "Mendil'e ulaşılamıyor. Bot çalışıyor mu?", generic: 'Olmadı ({error}).',
+      adminOnly: 'Bunu sadece yöneticiler yapabilir.', notYours: 'Sadece kendi istediğin şarkıları geçebilir veya silebilirsin.',
+      notOnline: 'Sunucuda bu takma adla kimse yok. Yazımı kontrol et ya da önce sunucuya gir.',
+      notAllowed: 'Bu botu kullanma yetkin yok.', codeRecentlySent: 'Az önce bir kod gönderildi. TeamSpeak sohbetine bak ya da yarım dakika bekle.',
+      wrongCode: 'Kod tutmadı.', codeExpired: 'Bu kodun süresi doldu. Yenisini iste.',
+      teamspeakOffline: "Mendil şu an TeamSpeak'e bağlı değil. Panel şifresini kullan.",
     },
   },
 };
 
 let lang = 'en';
 let state = null;
+let me = null; // { via, uid, name, role } from /api/session
+const isAdmin = () => me?.role === 'admin';
+const isMine = (track) => Boolean(track?.requesterUid) && track.requesterUid === me?.uid;
 let events = null;
 let lastTitle = null;
 const $ = (id) => document.getElementById(id);
@@ -130,7 +155,7 @@ async function api(method, path, body) {
   } catch {
     return { ok: false, error: 'offline' };
   }
-  if (res.status === 401 && path !== '/api/login') {
+  if (res.status === 401 && !path.startsWith('/api/login')) {
     showLogin();
     return { ok: false, error: 'loginRequired' };
   }
@@ -159,24 +184,81 @@ function icon(name) {
 
 // --- login ----------------------------------------------------------------------------------
 
-function showLogin() {
+let loginMode = 'teamspeak'; // or 'password'
+let pendingId = null;
+
+function showLoginStep(step) {
+  for (const id of ['ts-form', 'code-form', 'login-form']) $(id).hidden = id !== step;
+  $('login-switch').textContent = t(step === 'login-form' ? 'useTeamspeak' : 'usePassword');
+  $('login-switch').hidden = step === 'code-form';
+  $({ 'ts-form': 'ts-nickname', 'code-form': 'ts-code', 'login-form': 'password' }[step]).focus();
+}
+
+function loginError(result) {
+  const key = result.error === 'tooManyAttempts' ? 'tooManyAttempts' : result.error === 'wrongPassword' ? 'wrongPassword' : null;
+  $('login-error').textContent = key ? t(key) : errorText(result);
+}
+
+async function showLogin() {
   events?.close();
   events = null;
+  me = null;
   $('app').hidden = true;
   $('login').hidden = false;
-  $('password').focus();
+  $('login-error').textContent = '';
+  const session = await api('GET', '/api/session');
+  // Without a TeamSpeak connection nobody can receive a code; offer the password straight away.
+  const teamspeak = session.teamspeak !== false;
+  $('login-offline').hidden = teamspeak;
+  showLoginStep(loginMode === 'password' || !teamspeak ? 'login-form' : 'ts-form');
 }
+
+$('login-switch').addEventListener('click', () => {
+  $('login-error').textContent = '';
+  loginMode = $('login-form').hidden ? 'password' : 'teamspeak';
+  showLoginStep(loginMode === 'password' ? 'login-form' : 'ts-form');
+});
+
+$('ts-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('login-error').textContent = '';
+  const button = e.submitter ?? $('ts-form').querySelector('button');
+  button.disabled = true;
+  const result = await api('POST', '/api/login/code', { nickname: $('ts-nickname').value.trim() });
+  button.disabled = false;
+  if (!result.ok) return loginError(result);
+  pendingId = result.id;
+  $('code-label').textContent = t('codeLabel', { name: result.name });
+  $('ts-code').value = '';
+  showLoginStep('code-form');
+  return undefined;
+});
+
+$('code-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('login-error').textContent = '';
+  const result = await api('POST', '/api/login/verify', { id: pendingId, code: $('ts-code').value });
+  if (result.ok) {
+    pendingId = null;
+    return startApp();
+  }
+  loginError(result);
+  if (result.error === 'codeExpired') showLoginStep('ts-form');
+  return undefined;
+});
+
+$('code-back').addEventListener('click', () => {
+  $('login-error').textContent = '';
+  showLoginStep('ts-form');
+});
 
 $('login-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   $('login-error').textContent = '';
   const result = await api('POST', '/api/login', { password: $('password').value });
-  if (result.ok) {
-    $('password').value = '';
-    startApp();
-  } else {
-    $('login-error').textContent = t(result.error === 'tooManyAttempts' ? 'tooManyAttempts' : result.error === 'offline' ? 'errors.offline' : 'wrongPassword');
-  }
+  if (!result.ok) return loginError(result);
+  $('password').value = '';
+  return startApp();
 });
 
 $('logout').addEventListener('click', async () => {
@@ -239,7 +321,7 @@ function renderOnAir(s) {
   $('playpause-icon').setAttribute('href', !c || s.paused ? '#i-play' : '#i-pause');
   $('playpause-label').textContent = t(!c ? 'start' : s.paused ? 'resume' : 'pause');
   $('playpause').disabled = !c && s.queue.length === 0;
-  $('skip').disabled = !c;
+  $('skip').disabled = !c || !(isAdmin() || isMine(c));
   $('stop').disabled = !c && s.queue.length === 0;
   if (document.activeElement !== $('volume')) {
     $('volume').value = s.volume;
@@ -250,7 +332,7 @@ function renderOnAir(s) {
 function renderOrder(s) {
   const { times, end } = airTimes(s);
   const body = $('order');
-  const keys = s.queue.map((q, i) => `${i}|${q.url}`).join('\n');
+  const keys = `${me?.role}|${me?.uid}\n${s.queue.map((q, i) => `${i}|${q.url}`).join('\n')}`;
   if (body.dataset.keys !== keys) {
     const before = rowPositions(body);
     body.dataset.keys = keys;
@@ -304,6 +386,8 @@ function row(q, position, key) {
   const remove = Object.assign(document.createElement('button'), { className: 'remove', type: 'button' });
   remove.setAttribute('aria-label', `${t('remove')}: ${q.title}`);
   remove.append(icon('remove'));
+  remove.hidden = !(isAdmin() || isMine(q));
+  tr.classList.toggle('is-mine', isMine(q));
   remove.addEventListener('click', async () => {
     remove.disabled = true;
     const result = await api('POST', '/api/remove', { index: position, url: q.url });
@@ -498,18 +582,31 @@ function tickClock() {
 }
 setInterval(tickClock, 1000);
 
-function startApp() {
+/** Admin-only controls are hidden for listeners; the server enforces the same rules. */
+function applyRole() {
+  for (const el of document.querySelectorAll('[data-admin]')) el.hidden = !isAdmin();
+  $('me').hidden = !me?.name;
+  $('me').textContent = me?.name ?? '';
+  $('logout').title = me?.name ? t('signedInAs', { name: me.name }) : '';
+}
+
+async function startApp(session) {
+  session ??= await api('GET', '/api/session');
+  if (!session.loggedIn) return showLogin();
+  me = session.user;
+  applyRole();
   tickClock();
   $('login').hidden = true;
   $('app').hidden = false;
   connectEvents();
-  loadLog();
+  if (isAdmin()) loadLog();
+  return undefined;
 }
 
 (async () => {
   const session = await api('GET', '/api/session');
   if (session.lang && STRINGS[session.lang]) lang = session.lang;
   applyStrings();
-  if (session.loggedIn) startApp();
+  if (session.loggedIn) startApp(session);
   else showLogin();
 })();

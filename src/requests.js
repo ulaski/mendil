@@ -20,7 +20,7 @@ export function createRequests(bot) {
   }
 
   /** Adds already resolved tracks, respecting MAX_TRACK_DURATION and MAX_QUEUE. */
-  function admit(found, { front = false, requestedBy, playlistTitle = null } = {}) {
+  function admit(found, { front = false, requestedBy, requesterUid = null, playlistTitle = null } = {}) {
     if (player.queue.length >= config.player.maxQueue) return { ok: false, error: 'queueFull' };
     const max = config.player.maxTrackDuration;
     let tracks = found.filter((tr) => !max || tr.isLive || !tr.duration || tr.duration <= max);
@@ -30,13 +30,13 @@ export function createRequests(bot) {
 
     const wasIdle = !player.isPlaying;
     const position = front ? 1 : player.queue.length + 1;
-    const added = tracks.map((tr) => ({ ...tr, requestedBy }));
+    const added = tracks.map((tr) => ({ ...tr, requestedBy, requesterUid }));
     player.add(added, { front });
     return { ok: true, added, position, wasIdle, playlistTitle, tooLong };
   }
 
   /** A link, a playlist or search terms -> tracks in the queue. */
-  async function request(input, { front = false, requestedBy } = {}) {
+  async function request(input, { front = false, requestedBy, requesterUid = null } = {}) {
     if (!input) return { ok: false, error: 'empty' };
     if (player.queue.length >= config.player.maxQueue) return { ok: false, error: 'queueFull' };
     let result;
@@ -47,7 +47,7 @@ export function createRequests(bot) {
     } catch (err) {
       return failure(err);
     }
-    return admit(result.tracks, { front, requestedBy, playlistTitle: result.playlistTitle });
+    return admit(result.tracks, { front, requestedBy, requesterUid, playlistTitle: result.playlistTitle });
   }
 
   /** The top YouTube results for some search terms: { ok, results } or a failure. */

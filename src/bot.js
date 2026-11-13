@@ -13,6 +13,7 @@ import { createI18n } from './i18n/index.js';
 import { chunkMessage, formatDuration, safe, stripBBCode, trackLink } from './format.js';
 import { isYoutubeBlock, YOUTUBE_DOCS_URL } from './ytdlp.js';
 import { createBackend } from './voice/index.js';
+import { needsGroups, ROLE_RANK, roleFor } from './roles.js';
 
 export { isProcessAlive } from './voice/classic.js';
 
@@ -337,10 +338,11 @@ export class Bot {
       return;
     }
 
-    const ctx = { invokerId, invokerName, invokerUid, reply };
-    if (!['help', 'whoami'].includes(command.names[0]) && !(await this.#isAllowed(invokerId, invokerUid))) {
-      this.log.info(`denied ${invokerName} (${invokerUid}): ${prefix}${rawName}`);
-      await ctx.reply(this.i18n.t('notAllowed'));
+    const user = await this.userFor(invokerId, invokerUid, invokerName);
+    const ctx = { invokerId, invokerName, invokerUid, user, reply };
+    if (ROLE_RANK[user.role] < ROLE_RANK[command.role]) {
+      this.log.info(`denied ${invokerName} (${invokerUid}, ${user.role}): ${prefix}${rawName}`);
+      await ctx.reply(this.i18n.t(user.role === 'none' ? 'notAllowed' : 'adminOnly'));
       return;
     }
 
@@ -354,19 +356,36 @@ export class Bot {
     await command.run(ctx, rest.join(' ').trim());
   }
 
-  /** ALLOWED_UIDS / ALLOWED_GROUPS; both empty means everyone may use the bot. */
-  async #isAllowed(clid, uid) {
-    const { allowedUids, allowedGroups } = this.config.bot;
-    if (allowedUids.length === 0 && allowedGroups.length === 0) return true;
-    if (allowedUids.includes(uid)) return true;
-    if (allowedGroups.length === 0) return false;
-    try {
-      const { groups } = await this.clientInfo(clid);
-      return groups.some((g) => allowedGroups.includes(String(g)));
-    } catch (err) {
-      this.log.warn(`could not look up server groups of client ${clid}: ${err.message}`);
-      return false;
+  /**
+   * A TeamSpeak user with their role (src/roles.js). Server groups are only looked up when
+   * the role depends on them; if that lookup fails the user gets the role without groups.
+   */
+  async userFor(clid, uid, name) {
+    let groups = [];
+    if (needsGroups(this.config.bot, uid)) {
+      try {
+        ({ groups } = await this.clientInfo(clid));
+      } catch (err) {
+        this.log.warn(`could not look up server groups of client ${clid}: ${err.message}`);
+      }
     }
+    return { uid, name, groups, role: roleFor(this.config.bot, { uid, groups }) };
+  }
+
+  /**
+   * The online client with exactly this nickname (case-insensitive) with their unique ID and
+   * server groups, or null. For the web panel's TeamSpeak sign-in.
+   */
+  async findClient(nickname) {
+    if (!this.voice.connected) return null;
+    const clid = await this.voice.findClientByName(nickname);
+    if (clid == null) return null;
+    const info = await this.clientInfo(clid);
+    return { clid, uid: info.uid, name: info.name, groups: info.groups };
+  }
+
+  sendPrivate(clid, text) {
+    return this.#sendText({ mode: 'private', clid }, text);
   }
 
   sendChannel(text) {

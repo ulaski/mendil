@@ -11,6 +11,10 @@ export default {
   // generic
   unknownCommand: 'Unknown command. Type {prefix}help',
   notAllowed: "You're not allowed to use this bot.",
+  adminOnly: 'Only admins can do that.',
+  notYours: 'You can only skip or remove songs you requested.',
+  roles: { admin: 'admin', listener: 'listener', none: 'no access' },
+  panelCode: 'Your Mendil web panel code: [b]{code}[/b]. It works for 5 minutes. If you did not ask for it, ignore this message.',
   shuttingDown: 'Bot is shutting down',
   nothingPlaying: 'Nothing is playing right now.',
   pickRange: 'Enter a number between 1 and {max}.',
@@ -64,7 +68,7 @@ export default {
   hintTalkPower: 'Heads-up: nobody can hear me in this channel. It needs talk power {needed} and I have {have}. An admin can give me more talk power or make me a talker.',
 
   // whoami
-  whoami: '{name}: your unique ID is [b]{uid}[/b], server groups: {groups}. Admins can put these in ALLOWED_UIDS / ALLOWED_GROUPS.',
+  whoami: '{name}: your unique ID is [b]{uid}[/b], server groups: {groups}, role: {role}. The bot owner can put these in ADMIN_UIDS / ADMIN_GROUPS or ALLOWED_UIDS / ALLOWED_GROUPS.',
 
   // volume / channel
   volume: 'Volume: {volume}%',

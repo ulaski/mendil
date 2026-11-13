@@ -27,7 +27,7 @@ export const MAX_CONSECUTIVE_FAILURES = 3;
 export const LOOP_MODES = ['off', 'one', 'all'];
 
 // startAt: where a restored track resumes (seconds); only set on queued tracks.
-const TRACK_FIELDS = ['title', 'url', 'duration', 'isLive', 'requestedBy', 'startAt'];
+const TRACK_FIELDS = ['title', 'url', 'duration', 'isLive', 'requestedBy', 'requesterUid', 'startAt'];
 /** The persistent part of a track (no runtime fields like position or retries). */
 export const plainTrack = (t) => Object.fromEntries(TRACK_FIELDS.filter((k) => t[k] !== undefined).map((k) => [k, t[k]]));
 

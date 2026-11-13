@@ -33,8 +33,8 @@ In Türkiye, people at a *gazino* or *meyhane* used to write their song request 
 - 🩹 Gets back on its feet after crashes, kicks, bans and server restarts, and after a restart it continues the song where it stopped
 - 🌍 Speaks English and Turkish. [Adding a language](CONTRIBUTING.md#adding-a-language) means translating one file.
 - 🩺 Tells you when a channel setting makes music sound bad or keeps it from being heard, and explains YouTube blocks
-- 🔐 Can be limited to certain people, by TeamSpeak unique ID or server group
-- 🖥️ Has a web panel: see what's playing, manage the queue and add songs from your browser or phone
+- 🔐 Knows admins from listeners: listeners request songs and can skip or remove their own, admins control the rest. Set by TeamSpeak unique ID or server group.
+- 🖥️ Has a web panel: see what's playing, manage the queue and add songs from your browser or phone. Friends sign in with their TeamSpeak name.
 - 🧪 Comes with two voice engines: the official TeamSpeak client, or an experimental native engine that also runs on ARM and plays music in any channel
 
 ## How it works
@@ -172,6 +172,11 @@ and start it with `docker compose up -d --build`.
 
 Mendil also has a web panel on port 8080: what's playing, the queue, volume and loop, a box to request songs and search YouTube, and the live log. It works on phones too.
 
+There are two ways to sign in:
+
+- **With TeamSpeak.** Type your TeamSpeak nickname while you're on the server, and Mendil sends you a one-time code in a private message. The panel then knows who you are and gives you the same [role](#roles) as in chat: listeners see the queue and request songs, admins get every control. Songs you request show your name.
+- **With the panel password.** Always an admin. Use it when Mendil isn't connected to TeamSpeak.
+
 To open it, publish the port in `docker-compose.yml`:
 
 ```yaml
@@ -179,7 +184,7 @@ To open it, publish the port in `docker-compose.yml`:
       - "127.0.0.1:8080:8080"
 ```
 
-Then open http://localhost:8080 on the machine that runs Mendil. The password is in the log on first start (`docker compose logs mendil | grep password`), or choose one with `PANEL_PASSWORD`.
+Then open http://localhost:8080 on the machine that runs Mendil. The panel password is in the log on first start (`docker compose logs mendil | grep password`), or choose one with `PANEL_PASSWORD`.
 
 On a server, keep the `127.0.0.1:` part and reach the panel through an SSH tunnel (`ssh -L 8080:localhost:8080 you@server`, then open http://localhost:8080), or put it behind a reverse proxy with HTTPS. Don't publish it to the internet over plain HTTP: the password would travel unencrypted. `PANEL_PORT=0` turns the panel off.
 
@@ -203,29 +208,43 @@ Mendil checks the codec and talk power when it joins a channel and posts a short
 
 ## Commands
 
-Mendil reads its own channel's chat and private messages sent to it. In private chat the `!` prefix is optional.
+Mendil reads its own channel's chat and private messages sent to it. In private chat the `!` prefix is optional. Commands marked 🔒 are for admins once you've set up [roles](#roles).
 
 | Command | Aliases | Description |
 |---|---|---|
 | `!play <link \| search>` | `!p` | Play now, or add to the end of the queue. Accepts a YouTube link, a playlist or search terms. |
-| `!playnext <link \| search>` | `!pn` | Add to the front of the queue |
+| `!playnext <link \| search>` 🔒 | `!pn` | Add to the front of the queue |
 | `!search <search>` | `!find` | Show the top 5 YouTube results |
 | `!pick <number>` | | Queue a result from `!search` |
-| `!skip` | `!s`, `!next` | Skip the current track |
-| `!pause` / `!resume` | `!unpause` | Pause / resume |
-| `!stop` | | Stop and clear the queue |
+| `!skip` | `!s`, `!next` | Skip the current track. Listeners can skip only their own songs. |
+| `!pause` / `!resume` 🔒 | `!unpause` | Pause / resume |
+| `!stop` 🔒 | | Stop and clear the queue |
 | `!np` | `!now`, `!nowplaying` | Show the current track and its progress |
 | `!queue` | `!q`, `!list` | Show the queue |
-| `!remove <number>` | `!rm` | Remove a track from the queue |
-| `!clear` | | Clear the queue (the current track keeps playing) |
-| `!shuffle` | | Shuffle the queue |
-| `!loop [off\|one\|all]` | `!repeat` | Loop nothing, the current track, or the whole queue |
-| `!vol [0-100]` | `!volume`, `!v` | Show or set the volume |
-| `!join` | `!come` | Move the bot to your channel. From another channel, send it as a private message. |
-| `!whoami` | `!me`, `!id` | Show your unique ID and server groups, for `ALLOWED_UIDS` / `ALLOWED_GROUPS` |
+| `!remove <number>` | `!rm` | Remove a track from the queue. Listeners can remove only their own songs. |
+| `!clear` 🔒 | | Clear the queue (the current track keeps playing) |
+| `!shuffle` 🔒 | | Shuffle the queue |
+| `!loop [off\|one\|all]` 🔒 | `!repeat` | Loop nothing, the current track, or the whole queue |
+| `!vol [0-100]` | `!volume`, `!v` | Show the volume; setting it is for admins 🔒 |
+| `!join` 🔒 | `!come` | Move the bot to your channel. From another channel, send it as a private message. |
+| `!whoami` | `!me`, `!id` | Show your unique ID, server groups and role |
 | `!help` | `!h`, `!commands` | List commands |
 
 With `BOT_LANGUAGE=tr`, Turkish aliases also work, e.g. `!çal`, `!geç`, `!ses`, `!gel`.
+
+### Roles
+
+Out of the box everyone can do everything. To keep the controls for a few people, name them as admins:
+
+```env
+# e.g. your server's "Server Admin" group, and/or single people (!whoami shows your ID and groups)
+ADMIN_GROUPS=6
+ADMIN_UIDS=abc123=
+```
+
+Everyone else becomes a listener. Listeners can request and search songs, see what's playing and the queue, and skip or remove the songs they requested themselves. Pausing, stopping, the volume, loop, shuffle, clearing, play-next, `!join` and other people's songs are for admins. The web panel follows the same rules.
+
+To keep some people out entirely, add `ALLOWED_UIDS` / `ALLOWED_GROUPS`: then only those people (and the admins) can use the bot at all.
 
 ## Configuration
 
@@ -242,8 +261,10 @@ All settings are environment variables, usually set in `.env`.
 | `BOT_NICKNAME` | `Mendil` | Nickname |
 | `BOT_LANGUAGE` | `en` | Chat language: `en`, `tr` |
 | `COMMAND_PREFIX` | `!` | Command prefix |
-| `ALLOWED_UIDS` | | Comma-separated TS3 unique IDs allowed to control the bot. `!whoami` shows yours. |
-| `ALLOWED_GROUPS` | | Comma-separated server group IDs allowed to control the bot. If both lists are empty, everyone can; `!help` and `!whoami` always work. |
+| `ADMIN_UIDS` | | Comma-separated TeamSpeak unique IDs of [admins](#roles). `!whoami` shows yours. |
+| `ADMIN_GROUPS` | | Comma-separated server group IDs of admins. If both admin lists are empty, everyone who may use the bot is an admin. |
+| `ALLOWED_UIDS` | | Comma-separated unique IDs allowed to use the bot at all. |
+| `ALLOWED_GROUPS` | | Comma-separated server group IDs allowed to use the bot at all. If both lists are empty, everyone can; `!help` and `!whoami` always work, and admins are always allowed. |
 | `CHANNEL_HINTS` | `true` | Post a hint when the channel's codec or talk power is wrong for music |
 | `ANNOUNCE_TRACKS` | `true` | Post "Now playing" messages |
 | `DEFAULT_VOLUME` | `70` | Start-up volume, 0 to 100 |
@@ -261,7 +282,7 @@ All settings are environment variables, usually set in `.env`.
 | `NATIVE_BITRATE` | `128` | Native engine only: Opus bitrate in kbit/s, 48 to 192 |
 | `PANEL_PORT` | `8080` | Port of the web panel inside the container. `0` turns it off. |
 | `PANEL_TRUST_PROXY` | `false` | Set to `true` when the panel is behind a reverse proxy, so the login limit applies per client instead of to the proxy |
-| `PANEL_PASSWORD` | | Password for the web panel. If empty, one is generated on first start and printed in the log. |
+| `PANEL_PASSWORD` | | Admin password for the web panel. If empty, one is generated on first start and printed in the log. Everyone else signs in with their TeamSpeak nickname. |
 | `TS3_CLIENT_VERSION` | `3.6.2` | TeamSpeak client version to download |
 | `TS3_CLIENT_SHA256` | | Expected SHA-256 of that download. Known for 3.6.2; set it if you change the version. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
@@ -327,7 +348,7 @@ TeamSpeak has announced that TS3 reaches end-of-life at the end of 2027, but has
 yt-dlp supports SoundCloud and many other sites, and direct links usually work. Spotify doesn't serve audio to third parties.
 
 **Who can use the bot?**
-By default everyone who can write to it, and `!play` takes links to any site yt-dlp supports. On a public server, limit it with `ALLOWED_UIDS` or `ALLOWED_GROUPS`. Each user can start a few searches at once and then one every few seconds, so one person can't keep the bot busy for everyone.
+By default everyone who can write to it, and `!play` takes links to any site yt-dlp supports. Name admins with `ADMIN_UIDS` or `ADMIN_GROUPS` so only they control playback ([Roles](#roles)), and on a public server limit who can use it at all with `ALLOWED_UIDS` or `ALLOWED_GROUPS`. Each user can start a few searches at once and then one every few seconds, so one person can't keep the bot busy for everyone.
 
 ## Development
 

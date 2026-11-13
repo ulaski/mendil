@@ -27,15 +27,35 @@
   </svg>
 
   <main id="login" class="login" hidden>
-    <form id="login-form" class="login-panel" autocomplete="on">
+    <div class="login-panel">
       <img src="/logo.png" alt="" width="88" height="88">
       <h1>Mendil</h1>
-      <label for="password" data-t="passwordLabel">Panel password</label>
-      <input id="password" name="password" type="password" autocomplete="current-password" required>
-      <button type="submit" class="btn primary" data-t="signIn">Sign in</button>
+
+      <form id="ts-form" class="login-step" autocomplete="on">
+        <label for="ts-nickname" data-t="nicknameLabel">Your TeamSpeak nickname</label>
+        <input id="ts-nickname" name="nickname" type="text" maxlength="64" autocomplete="nickname" autocapitalize="off" spellcheck="false" required>
+        <button type="submit" class="btn primary" data-t="sendCode">Send me a code</button>
+        <p class="hint" data-t="sendCodeHint">Mendil sends the code to you in a private TeamSpeak message. You need to be on the server.</p>
+      </form>
+
+      <form id="code-form" class="login-step" autocomplete="off" hidden>
+        <label for="ts-code" id="code-label">Code</label>
+        <input id="ts-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="7" pattern="[0-9 ]*" required>
+        <button type="submit" class="btn primary" data-t="signIn">Sign in</button>
+        <button type="button" class="link" id="code-back" data-t="otherNickname">Use a different nickname</button>
+      </form>
+
+      <form id="login-form" class="login-step" autocomplete="on" hidden>
+        <label for="password" data-t="passwordLabel">Panel password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button type="submit" class="btn primary" data-t="signIn">Sign in</button>
+        <p class="hint" data-t="passwordHint">The password is in the bot's log on first start, or set it with PANEL_PASSWORD.</p>
+      </form>
+
       <p id="login-error" class="form-error" role="alert"></p>
-      <p class="hint" data-t="passwordHint">The password is in the bot's log on first start, or set it with PANEL_PASSWORD.</p>
-    </form>
+      <p id="login-offline" class="hint" data-t="teamspeakOfflineHint" hidden>Mendil isn't connected to TeamSpeak right now, so only the panel password works.</p>
+      <button type="button" class="link login-switch" id="login-switch" data-t="usePassword">Sign in with the panel password</button>
+    </div>
   </main>
 
   <div id="app" class="app" hidden>
@@ -45,6 +65,7 @@
       <p class="bar-status" id="status" aria-live="polite"><span class="dot"></span><span id="status-text"></span></p>
       <span class="bar-engine" id="engine"></span>
       <time class="bar-clock" id="clock"></time>
+      <span class="bar-user" id="me" hidden></span>
       <button class="bar-signout" id="logout" type="button"><svg class="icon"><use href="#i-signout"/></svg><span data-t="signOut">Sign out</span></button>
     </header>
 
@@ -57,10 +78,10 @@
         <div class="progress" aria-hidden="true"><span id="progress-bar"></span></div>
       </div>
       <div class="transport">
-        <button class="btn primary" id="playpause" type="button"><svg class="icon"><use id="playpause-icon" href="#i-pause"/></svg><span id="playpause-label">Pause</span></button>
+        <button class="btn primary" id="playpause" type="button" data-admin><svg class="icon"><use id="playpause-icon" href="#i-pause"/></svg><span id="playpause-label">Pause</span></button>
         <button class="btn" id="skip" type="button"><svg class="icon"><use href="#i-skip"/></svg><span data-t="skip">Skip</span></button>
-        <button class="btn" id="stop" type="button"><svg class="icon"><use href="#i-stop"/></svg><span data-t="stop">Stop</span></button>
-        <label class="volume">
+        <button class="btn" id="stop" type="button" data-admin><svg class="icon"><use href="#i-stop"/></svg><span data-t="stop">Stop</span></button>
+        <label class="volume" data-admin>
           <svg class="icon" aria-hidden="true"><use href="#i-volume"/></svg>
           <span class="visually-hidden" data-t="volume">Volume</span>
           <input type="range" id="volume" min="0" max="100" step="1">
@@ -74,7 +95,7 @@
         <div class="schedule-head">
           <h2 id="schedule-heading" data-t="runningOrder">Running order</h2>
           <p class="schedule-summary" id="schedule-summary"></p>
-          <div class="schedule-actions">
+          <div class="schedule-actions" data-admin>
             <button class="btn quiet" id="shuffle" type="button"><svg class="icon"><use href="#i-shuffle"/></svg><span data-t="shuffle">Shuffle</span></button>
             <button class="btn quiet" id="clear" type="button"><svg class="icon"><use href="#i-clear"/></svg><span data-t="clear">Clear</span></button>
           </div>
@@ -92,14 +113,14 @@
           <input id="query" type="text" maxlength="500" data-t-placeholder="requestPlaceholder" placeholder="YouTube link or song name">
           <div class="request-actions">
             <button type="submit" class="btn primary" id="add"><svg class="icon"><use href="#i-add"/></svg><span data-t="play">Add to queue</span></button>
-            <button type="button" class="btn" id="play-next"><svg class="icon"><use href="#i-next"/></svg><span data-t="playNext">Play next</span></button>
+            <button type="button" class="btn" id="play-next" data-admin><svg class="icon"><use href="#i-next"/></svg><span data-t="playNext">Play next</span></button>
             <button type="button" class="btn" id="search"><svg class="icon"><use href="#i-search"/></svg><span data-t="searchButton">Search</span></button>
           </div>
           <p class="request-result" id="request-result" role="status"></p>
           <ol class="results" id="results" hidden></ol>
         </form>
 
-        <div class="panel loop">
+        <div class="panel loop" data-admin>
           <h2 id="loop-label" data-t="loop">Repeat</h2>
           <div class="segmented" role="radiogroup" aria-labelledby="loop-label">
             <button type="button" role="radio" data-loop="off" data-t="loopOff">Off</button>
@@ -108,7 +129,7 @@
           </div>
         </div>
 
-        <section class="panel log" aria-labelledby="log-heading">
+        <section class="panel log" aria-labelledby="log-heading" data-admin>
           <div class="log-head">
             <h2 id="log-heading" data-t="log">Log</h2>
             <button class="btn quiet small" id="log-toggle" type="button" aria-expanded="false" data-t="logMore">Show more</button>

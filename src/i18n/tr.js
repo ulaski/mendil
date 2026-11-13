@@ -8,6 +8,10 @@ export default {
 
   unknownCommand: 'Bilinmeyen komut. {prefix}help yaz.',
   notAllowed: 'Bu botu kullanma yetkin yok.',
+  adminOnly: 'Bunu sadece yöneticiler yapabilir.',
+  notYours: 'Sadece kendi istediğin şarkıları geçebilir veya silebilirsin.',
+  roles: { admin: 'yönetici', listener: 'dinleyici', none: 'yetkisiz' },
+  panelCode: 'Mendil web paneli kodun: [b]{code}[/b]. 5 dakika geçerli. Sen istemediysen bu mesajı yok say.',
   shuttingDown: 'Bot kapanıyor',
   nothingPlaying: 'Şu an bir şey çalmıyor.',
   pickRange: '1 ile {max} arasında bir numara gir.',
@@ -55,7 +59,7 @@ export default {
   hintQuality: 'Bilginize: bu kanalın ses kalitesi {quality}. Müzik için bir yönetici bunu 10 yapabilir (Kanalı Düzenle → Ses).',
   hintTalkPower: 'Bilginize: bu kanalda beni kimse duyamıyor. Kanal {needed} konuşma gücü istiyor, bende {have} var. Bir yönetici bana konuşma gücü verebilir ya da konuşmacı yapabilir.',
 
-  whoami: '{name}: benzersiz kimliğin [b]{uid}[/b], sunucu grupların: {groups}. Yöneticiler bunları ALLOWED_UIDS / ALLOWED_GROUPS ayarına yazabilir.',
+  whoami: '{name}: benzersiz kimliğin [b]{uid}[/b], sunucu grupların: {groups}, rolün: {role}. Botun sahibi bunları ADMIN_UIDS / ADMIN_GROUPS veya ALLOWED_UIDS / ALLOWED_GROUPS ayarına yazabilir.',
 
   volume: 'Ses: {volume}%',
   volumeRange: '0 ile 100 arasında bir değer gir.',

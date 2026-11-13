@@ -69,6 +69,9 @@ export function loadConfig() {
       prefix: env.COMMAND_PREFIX || '!',
       allowedUids: list(env.ALLOWED_UIDS),
       allowedGroups: list(env.ALLOWED_GROUPS),
+      // Roles (src/roles.js): admins control playback; with none set, every allowed user is one.
+      adminUids: list(env.ADMIN_UIDS),
+      adminGroups: list(env.ADMIN_GROUPS),
       channelHints: bool(env.CHANNEL_HINTS, true),
       announceTracks: bool(env.ANNOUNCE_TRACKS, true),
     },

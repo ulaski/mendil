@@ -2,12 +2,14 @@ import { LOOP_MODES } from './player.js';
 import { YOUTUBE_DOCS_URL } from './ytdlp.js';
 import { createRequests } from './requests.js';
 import { formatDuration, safe, trackLink } from './format.js';
+import { mayManage, ROLE_RANK } from './roles.js';
 
 const LOOP_ALIASES = { off: 'off', one: 'one', track: 'one', all: 'all', queue: 'all' };
 
 /**
  * Chat commands. Each handler receives (ctx, argText) where ctx has
- * { invokerId, invokerName, invokerUid, reply(text) }.
+ * { invokerId, invokerName, invokerUid, user: {uid, name, role}, reply(text) }.
+ * `role` is the least role a command needs (src/roles.js); the bot checks it before run().
  *
  * Returns a Map of every accepted command name/alias -> command.
  */
@@ -51,7 +53,7 @@ export function createCommands(bot) {
   }
 
   async function enqueue(ctx, input, { front = false } = {}) {
-    return replyTo(ctx, await requests.request(input, { front, requestedBy: ctx.invokerName }));
+    return replyTo(ctx, await requests.request(input, { front, requestedBy: ctx.invokerName, requesterUid: ctx.invokerUid }));
   }
 
   function parseIndex(arg, max) {
@@ -63,14 +65,17 @@ export function createCommands(bot) {
   const commands = [
     {
       names: ['play', 'p'],
+      role: 'listener',
       run: (ctx, arg) => enqueue(ctx, arg),
     },
     {
       names: ['playnext', 'pn'],
+      role: 'admin',
       run: (ctx, arg) => enqueue(ctx, arg, { front: true }),
     },
     {
       names: ['search', 'find'],
+      role: 'listener',
       run: async (ctx, arg) => {
         if (!arg) return ctx.reply(t('usageSearch'));
         const found = await requests.search(arg);
@@ -88,18 +93,21 @@ export function createCommands(bot) {
     },
     {
       names: ['pick'],
+      role: 'listener',
       run: (ctx, arg) => {
         const results = searchResults.get(ctx.invokerUid);
         if (!results) return ctx.reply(t('searchFirst'));
         const n = parseIndex(arg, results.length);
         if (!n) return ctx.reply(t('pickRange', { max: results.length }));
-        return replyTo(ctx, requests.admit([results[n - 1]], { requestedBy: ctx.invokerName }));
+        return replyTo(ctx, requests.admit([results[n - 1]], { requestedBy: ctx.invokerName, requesterUid: ctx.invokerUid }));
       },
     },
     {
       names: ['skip', 's', 'next'],
+      role: 'listener',
       run: async (ctx) => {
         if (!player.current) return ctx.reply(t('nothingPlaying'));
+        if (!mayManage(ctx.user, player.current)) return ctx.reply(t('notYours'));
         // reply first so it shows up before the next track's announcement
         await ctx.reply(t('skipped', { title: safe(player.current.title) }));
         player.skip();
@@ -108,6 +116,7 @@ export function createCommands(bot) {
     },
     {
       names: ['stop'],
+      role: 'admin',
       run: (ctx) => {
         player.stop();
         return ctx.reply(t('stopped'));
@@ -115,6 +124,7 @@ export function createCommands(bot) {
     },
     {
       names: ['pause'],
+      role: 'admin',
       run: (ctx) => {
         if (!player.pause()) return ctx.reply(player.paused ? t('alreadyPaused') : t('nothingPlaying'));
         bot.setTransmitting(false);
@@ -123,6 +133,7 @@ export function createCommands(bot) {
     },
     {
       names: ['resume', 'unpause'],
+      role: 'admin',
       run: (ctx) => {
         if (!player.resume()) return ctx.reply(t('notPaused'));
         bot.setTransmitting(true);
@@ -131,6 +142,7 @@ export function createCommands(bot) {
     },
     {
       names: ['np', 'now', 'nowplaying'],
+      role: 'listener',
       run: (ctx) => {
         const tr = player.current;
         if (!tr) return ctx.reply(t('nothingPlaying'));
@@ -147,6 +159,7 @@ export function createCommands(bot) {
     },
     {
       names: ['queue', 'q', 'list'],
+      role: 'listener',
       run: (ctx) => {
         const lines = [];
         if (player.current) lines.push(`▶ ${trackLink(player.current)} (${length(player.current)})`);
@@ -167,16 +180,19 @@ export function createCommands(bot) {
     },
     {
       names: ['remove', 'rm'],
+      role: 'listener',
       run: (ctx, arg) => {
         if (player.queue.length === 0) return ctx.reply(t('queueEmpty'));
         const n = parseIndex(arg, player.queue.length);
         if (!n) return ctx.reply(t('pickRange', { max: player.queue.length }));
+        if (!mayManage(ctx.user, player.queue[n - 1])) return ctx.reply(t('notYours'));
         const removed = player.remove(n);
         return ctx.reply(t('removed', { title: safe(removed.title) }));
       },
     },
     {
       names: ['clear'],
+      role: 'admin',
       run: (ctx) => {
         const count = player.clear();
         return ctx.reply(t('cleared', { count }));
@@ -184,6 +200,7 @@ export function createCommands(bot) {
     },
     {
       names: ['shuffle'],
+      role: 'admin',
       run: (ctx) => {
         player.shuffle();
         return ctx.reply(t('shuffled'));
@@ -191,6 +208,7 @@ export function createCommands(bot) {
     },
     {
       names: ['loop', 'repeat'],
+      role: 'admin',
       run: (ctx, arg) => {
         if (arg) {
           const key = arg.toLowerCase();
@@ -205,8 +223,10 @@ export function createCommands(bot) {
     },
     {
       names: ['vol', 'volume', 'v'],
+      role: 'listener',
       run: async (ctx, arg) => {
         if (!arg) return ctx.reply(t('volume', { volume: player.volume }));
+        if (ctx.user.role !== 'admin') return ctx.reply(t('adminOnly')); // listeners may only look
         const n = Number.parseInt(arg.replace('%', ''), 10);
         if (!Number.isInteger(n) || n < 0 || n > 100) return ctx.reply(t('volumeRange'));
         await player.setVolume(n);
@@ -215,6 +235,7 @@ export function createCommands(bot) {
     },
     {
       names: ['join', 'come'],
+      role: 'admin',
       run: async (ctx) => {
         try {
           await bot.moveToClientChannel(ctx.invokerId);
@@ -226,6 +247,7 @@ export function createCommands(bot) {
     },
     {
       names: ['whoami', 'me', 'id'],
+      role: 'none',
       run: async (ctx) => {
         let groups = '?';
         try {
@@ -233,13 +255,16 @@ export function createCommands(bot) {
         } catch {
           // not visible to the bot; the unique ID from the message is still useful
         }
-        return ctx.reply(t('whoami', { name: safe(ctx.invokerName), uid: ctx.invokerUid, groups }));
+        return ctx.reply(t('whoami', { name: safe(ctx.invokerName), uid: ctx.invokerUid, groups, role: t(`roles.${ctx.user.role}`) }));
       },
     },
     {
       names: ['help', 'h', 'commands'],
+      role: 'none',
       run: (ctx) => {
-        const lines = commands.map((c) => {
+        // Only what this user may run; a command for admins is just noise to a listener.
+        const rank = ROLE_RANK[ctx.user.role];
+        const lines = commands.filter((c) => ROLE_RANK[c.role] <= Math.max(rank, ROLE_RANK.listener)).map((c) => {
           const name = c.names[0];
           const usage = t(`usage.${name}`);
           const args = usage === `usage.${name}` ? '' : ` ${usage}`;

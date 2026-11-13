@@ -51,7 +51,13 @@ const server = http.createServer((req, res) => {
 await new Promise((r) => server.once('listening', r));
 const toneUrl = `http://127.0.0.1:${server.address().port}/tone.mp3`;
 
-// 2. Mendil with the native engine.
+// 2. Mendil with the native engine, and its web panel on a free port.
+const panelPort = await new Promise((resolve) => {
+  const probe = http.createServer().listen(0, '127.0.0.1', () => {
+    const { port: free } = probe.address();
+    probe.close(() => resolve(free));
+  });
+});
 const output = [];
 mendil = spawn(process.execPath, [path.join(ROOT, 'src/index.js')], {
   env: {
@@ -67,6 +73,9 @@ mendil = spawn(process.execPath, [path.join(ROOT, 'src/index.js')], {
     YTDLP_AUTO_UPDATE: 'false',
     CHANNEL_HINTS: 'false',
     LOG_LEVEL: 'debug',
+    PANEL_PORT: String(panelPort),
+    PANEL_HOST: '127.0.0.1',
+    PANEL_PASSWORD: 'e2e-password',
   },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
@@ -84,6 +93,16 @@ let mendilClid = null;
 client.on('textMessage', (m) => {
   if (m.invokerName === nickname) replies.push(m.message);
 });
+
+/** A JSON call to the panel; returns { status, json, cookie }. */
+async function panel(route, body, cookie) {
+  const res = await fetch(`http://127.0.0.1:${panelPort}${route}`, {
+    method: body ? 'POST' : 'GET',
+    headers: { 'content-type': 'application/json', 'x-mendil': '1', ...(cookie ? { cookie } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return { status: res.status, json: await res.json(), cookie: res.headers.get('set-cookie')?.split(';')[0] };
+}
 client.on('voiceData', (v) => {
   if (mendilClid !== null && Number(v.clientID) === mendilClid && v.data.length) {
     frames++;
@@ -135,6 +154,19 @@ try {
   await ask('!stop', /Stopped/);
   await sleep(1_500);
   if (Date.now() - lastFrameAt < 1_000) fail('still sending after !stop');
+
+  // Web panel: sign in as the test client with a code sent by private message.
+  const before = replies.length;
+  const sent = await panel('/api/login/code', { nickname: 'e2etester' });
+  if (sent.status !== 200) fail(`panel code request failed: ${JSON.stringify(sent.json)}`);
+  await until('the panel code by private message', () => replies.length > before);
+  const code = replies.at(-1).match(/\d{6}/)?.[0];
+  if (!code) fail(`no code in "${replies.at(-1)}"`);
+  const verified = await panel('/api/login/verify', { id: sent.json.id, code });
+  if (verified.status !== 200 || !verified.cookie) fail(`panel sign-in failed: ${JSON.stringify(verified.json)}`);
+  const session = await panel('/api/session', null, verified.cookie);
+  if (session.json.user?.name !== 'E2ETester' || session.json.user?.role !== 'admin') fail(`unexpected session ${JSON.stringify(session.json)}`);
+  log(`panel sign-in through TeamSpeak: ${session.json.user.name} (${session.json.user.role})`);
   log(`PASS: ${frames} frames received`);
 } catch (err) {
   failed = true;

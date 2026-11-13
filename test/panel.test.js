@@ -23,11 +23,16 @@ const player = Object.assign(new EventEmitter(), {
 });
 const voice = Object.assign(new EventEmitter(), { connected: true, me: { clid: '1', cid: '4' }, disconnectedSince: null });
 const requested = [];
+const privateMessages = [];
+const online = { ali: { clid: '7', uid: 'uid-ali', name: 'Ali', groups: ['8'] }, boss: { clid: '9', uid: 'uid-boss', name: 'Boss', groups: ['6'] },
+  cem: { clid: '10', uid: 'uid-cem', name: 'Cem', groups: ['8'] }, deniz: { clid: '11', uid: 'uid-deniz', name: 'Deniz', groups: ['6'] } };
 const bot = {
   player, voice, channelName: 'Music',
   config: { bot: { language: 'en' }, ts3: { nickname: 'Mendil' }, voice: { backend: 'native' } },
-  i18n: { t: () => 'the web panel' },
+  i18n: { t: (key, vars) => (key === 'panelCode' ? `code ${vars.code}` : 'the web panel') },
   setTransmitting() {},
+  async findClient(nickname) { return online[nickname.toLowerCase()] ?? null; },
+  async sendPrivate(clid, text) { privateMessages.push({ clid, text }); },
   requests: {
     async request(query, opts) { requested.push({ query, ...opts }); return { ok: true, added: [{ title: query }], position: 2, playlistTitle: null, tooLong: 0 }; },
     async search() { return { ok: true, results: [{ title: 'R', url: 'https://www.youtube.com/watch?v=r', duration: 60, isLive: false }] }; },
@@ -116,6 +121,12 @@ test('the session cookie is HttpOnly and SameSite=Strict, and works', async () =
 test('a forged session cookie is refused', async () => {
   const exp = Date.now() + 60_000;
   assert.equal((await call('GET', '/api/state', { cookie: `mendil_session=${exp}.forged` })).status, 401);
+  const payload = Buffer.from(JSON.stringify({ via: 'password', exp })).toString('base64url');
+  assert.equal((await call('GET', '/api/state', { cookie: `mendil_session=${payload}.forged` })).status, 401);
+  // A real cookie with an edited payload fails the signature check.
+  const real = (await login()).split('=')[1];
+  const edited = Buffer.from(JSON.stringify({ via: 'ts', uid: 'x', name: 'x', exp })).toString('base64url');
+  assert.equal((await call('GET', '/api/state', { cookie: `mendil_session=${edited}.${real.split('.')[1]}` })).status, 401);
 });
 
 test('POSTs without the X-Mendil header are refused (CSRF)', async () => {
@@ -128,7 +139,7 @@ test('actions go through: play, skip, volume, loop, remove', async () => {
   const cookie = await login();
   const play = await call('POST', '/api/play', { cookie, body: { query: 'fontaines dc', next: true } });
   assert.deepEqual(play.json, { ok: true, added: ['fontaines dc'], position: 2, playlistTitle: null, tooLong: 0 });
-  assert.deepEqual(requested.at(-1), { query: 'fontaines dc', front: true, requestedBy: 'the web panel' });
+  assert.deepEqual(requested.at(-1), { query: 'fontaines dc', front: true, requestedBy: 'the web panel', requesterUid: null });
   assert.equal((await call('POST', '/api/skip', { cookie })).json.ok, true);
   assert.equal(player.skipped, true);
   assert.equal((await call('POST', '/api/volume', { cookie, body: { volume: 55 } })).json.volume, 55);
@@ -147,6 +158,91 @@ test('the event stream starts with the current state', async () => {
   const res = await call('GET', '/api/events', { cookie, raw: true });
   assert.match(res.headers['content-type'], /text\/event-stream/);
   assert.match(res.text, /^event: state\ndata: \{/);
+});
+
+/** Signs in through TeamSpeak as `nickname`; returns the session cookie. */
+async function tsLogin(nickname) {
+  const sent = await call('POST', '/api/login/code', { body: { nickname } });
+  assert.equal(sent.status, 200, JSON.stringify(sent.json));
+  const code = privateMessages.at(-1).text.match(/\d{6}/)[0];
+  const res = await call('POST', '/api/login/verify', { body: { id: sent.json.id, code } });
+  assert.equal(res.status, 200, JSON.stringify(res.json));
+  return res.headers['set-cookie'][0].split(';')[0];
+}
+
+test('TeamSpeak sign-in: the code arrives by private message and works once', async () => {
+  const unknown = await call('POST', '/api/login/code', { body: { nickname: 'nobody' } });
+  assert.equal(unknown.json.error, 'notOnline');
+
+  const sent = await call('POST', '/api/login/code', { body: { nickname: 'ALI' } });
+  assert.equal(sent.status, 200);
+  assert.equal(privateMessages.at(-1).clid, '7');
+  const again = await call('POST', '/api/login/code', { body: { nickname: 'ali' } });
+  assert.equal(again.json.error, 'codeRecentlySent', 'no flood of codes to one person');
+
+  const code = privateMessages.at(-1).text.match(/\d{6}/)[0];
+  const wrong = code === '000000' ? '111111' : '000000';
+  assert.equal((await call('POST', '/api/login/verify', { body: { id: sent.json.id, code: wrong } })).json.error, 'wrongCode');
+  const ok = await call('POST', '/api/login/verify', { body: { id: sent.json.id, code } });
+  assert.equal(ok.status, 200);
+  const cookie = ok.headers['set-cookie'][0].split(';')[0];
+  assert.match(ok.headers['set-cookie'][0], /HttpOnly/);
+  const session = (await call('GET', '/api/session', { cookie })).json;
+  assert.deepEqual(session.user, { via: 'ts', uid: 'uid-ali', name: 'Ali', role: 'admin' }, 'no ADMIN_* set: everyone is an admin');
+  assert.equal((await call('POST', '/api/login/verify', { body: { id: sent.json.id, code } })).json.error, 'codeExpired', 'single use');
+});
+
+test('a code dies after five wrong guesses', async () => {
+  const sent = await call('POST', '/api/login/code', { body: { nickname: 'boss' } });
+  const code = privateMessages.at(-1).text.match(/\d{6}/)[0];
+  const wrong = code === '000000' ? '111111' : '000000';
+  for (let i = 0; i < 5; i++) await call('POST', '/api/login/verify', { body: { id: sent.json.id, code: wrong } });
+  assert.equal((await call('POST', '/api/login/verify', { body: { id: sent.json.id, code } })).json.error, 'codeExpired');
+  await login(); // clears this address's failed attempts for the next tests
+});
+
+test('roles: listeners request and manage their own songs, admins do the rest', async () => {
+  const roles = panel.config.bot;
+  roles.adminGroups = ['6'];
+  try {
+    const listener = await tsLogin('cem');
+    await login();
+    assert.equal((await call('GET', '/api/session', { cookie: listener })).json.user.role, 'listener');
+
+    // Requests are attributed to the TeamSpeak user.
+    assert.equal((await call('POST', '/api/play', { cookie: listener, body: { query: 'mimesis' } })).json.ok, true);
+    assert.deepEqual(requested.at(-1), { query: 'mimesis', front: false, requestedBy: 'Cem', requesterUid: 'uid-cem' });
+
+    for (const [route, body] of [['/api/stop'], ['/api/pause'], ['/api/clear'], ['/api/shuffle'], ['/api/volume', { volume: 10 }], ['/api/loop', { mode: 'one' }], ['/api/play', { query: 'x', next: true }]]) {
+      const res = await call('POST', route, { cookie: listener, body: body ?? {} });
+      assert.equal(res.status, 403, route);
+      assert.equal(res.json.error, 'adminOnly', route);
+    }
+    assert.equal((await call('GET', '/api/logs', { cookie: listener })).status, 403, 'the log is for admins');
+
+    player.current = { title: 'Theirs', url: 'https://t', requesterUid: 'uid-other' };
+    player.skipped = false;
+    assert.equal((await call('POST', '/api/skip', { cookie: listener })).json.error, 'notYours');
+    player.current = { title: 'Mine', url: 'https://m', requesterUid: 'uid-cem' };
+    assert.equal((await call('POST', '/api/skip', { cookie: listener })).json.ok, true);
+    assert.equal(player.skipped, true);
+
+    player.queue = [{ title: 'A', url: 'https://a', requesterUid: 'uid-other' }, { title: 'B', url: 'https://b', requesterUid: 'uid-cem' }];
+    assert.equal((await call('POST', '/api/remove', { cookie: listener, body: { index: 1, url: 'https://a' } })).json.error, 'notYours');
+    assert.equal((await call('POST', '/api/remove', { cookie: listener, body: { index: 2, url: 'https://b' } })).json.ok, true);
+
+    const admin = await tsLogin('deniz');
+    await login();
+    assert.equal((await call('GET', '/api/session', { cookie: admin })).json.user.role, 'admin');
+    assert.equal((await call('POST', '/api/remove', { cookie: admin, body: { index: 1, url: 'https://a' } })).json.ok, true);
+
+    // Roles are worked out per request: once ALLOWED_* leaves Cem out, the session stops working.
+    roles.allowedUids = ['uid-someone-else'];
+    assert.equal((await call('GET', '/api/state', { cookie: listener })).status, 401);
+  } finally {
+    roles.adminGroups = [];
+    roles.allowedUids = [];
+  }
 });
 
 test('behind a trusted proxy, the login limit is per client, not per proxy', async () => {

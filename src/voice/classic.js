@@ -48,7 +48,7 @@ export function isProcessAlive(pid) {
  *  - start(), tick() every few seconds, stop(message)
  *  - connected, me {clid, cid}, disconnectedSince, banned (getters)
  *  - sendText(target, chunk) (throws an error with .flood when anti-flood blocks it),
- *    setTransmitting(on), moveToClientChannel(clid), clientInfo(clid),
+ *    setTransmitting(on), moveToClientChannel(clid), clientInfo(clid), findClientByName(nickname),
  *    channelSettings(cid) -> {codec, quality, neededTalkPower, talkPower, isTalker}
  *  - audio: what the player plays into ({kind: 'pulse', sink} here)
  *  - playsAnyCodec: false (music sounds bad unless the channel uses Opus Music)
@@ -423,6 +423,14 @@ export class ClassicBackend extends EventEmitter {
     // refused move doesn't leave it pointing at the wrong channel.
     await this.#cq.send('clientmove', { cid: target.cid, clid: this.me.clid });
     return { moved: true };
+  }
+
+  /** The clid of the (non-query) client with this nickname, case-insensitive, or null. */
+  async findClientByName(nickname) {
+    const want = nickname.toLowerCase();
+    const clients = await this.#cq.send('clientlist');
+    const match = clients.find((c) => c.client_type !== '1' && c.clid !== this.me.clid && (c.client_nickname ?? '').toLowerCase() === want);
+    return match ? match.clid : null;
   }
 
   /** Unique id, nickname and server group ids of a client (cached briefly). */

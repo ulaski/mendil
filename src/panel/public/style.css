@@ -111,8 +111,17 @@ input[type="range"] { accent-color: var(--ink); }
 .login-panel h1 { text-align: center; font-size: 30px; font-weight: 800; letter-spacing: -.02em; margin-bottom: 8px; }
 .login-panel label { font-weight: 600; }
 .login-panel .btn { height: 44px; }
+.login-step { display: grid; gap: 12px; }
+.login-panel .form-error:empty { display: none; }
 .form-error { min-height: 1.4em; color: var(--lamp); font-weight: 600; }
 .hint { color: var(--ink-2); font-size: 13px; }
+.link {
+  justify-self: center; min-height: 32px; padding: 0 4px; border: 0; background: none; cursor: pointer;
+  color: var(--ink-2); font: inherit; font-size: 14px; text-decoration: underline; text-underline-offset: 3px;
+}
+.link:hover { color: var(--ink); }
+.login-switch { margin-top: 4px; }
+#ts-code { font-size: 22px; font-weight: 700; letter-spacing: .3em; text-align: center; font-variant-numeric: tabular-nums; }
 
 /* --- top bar -------------------------------------------------------------------------- */
 .bar {
@@ -126,6 +135,7 @@ input[type="range"] { accent-color: var(--ink); }
 .bar-status.is-connected .dot { background: var(--ok); }
 .bar-engine { color: var(--bar-ink-2); font-size: 13px; }
 .bar-clock { margin-left: auto; font-weight: 700; font-size: 17px; letter-spacing: .02em; color: var(--bar-ink); }
+.bar-user { color: var(--bar-ink-2); font-size: 14px; max-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bar-signout {
   display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px;
   border: 1px solid transparent; border-radius: var(--radius); background: transparent; color: var(--bar-ink-2); cursor: pointer;
@@ -260,7 +270,7 @@ input[type="range"] { accent-color: var(--ink); }
 @media (max-width: 900px) {
   .bar { padding: 8px 16px; gap: 10px; }
   .bar-status { margin-left: 0; }
-  .bar-engine { display: none; }
+  .bar-engine, .bar-user { display: none; }
   .onair { padding: 16px; gap: 14px; }
   .lamp { min-width: 0; min-height: 32px; padding: 6px 10px; font-size: 12px; }
   .transport { display: grid; grid-template-columns: 1.4fr 1fr 1fr; }
