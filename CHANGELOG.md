@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- **Unraid templates** (`examples/unraid/`), for the Classic and the Native engine, with the data in appdata.
+- **Pterodactyl egg** (`examples/pterodactyl/egg-mendil.json`), with the Native engine. Pelican imports it too.
+- `PUID` / `PGID`: when the container is started as root (`--user 0`), Mendil hands its data folders to that user and runs as it, never as root. This is what the Unraid templates use.
+- Under Pterodactyl, Mendil keeps its data in `/home/container` and puts the web panel on the server's port.
+
 ## [0.6.2] - 2026-11-13
 
 A documentation site.

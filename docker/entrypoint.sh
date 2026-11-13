@@ -6,6 +6,35 @@ set -euo pipefail
 log() { echo "$(date -u +%Y-%m-%dT%H:%M:%S.000Z) [entrypoint] $*"; }
 die() { log "ERROR: $*"; exit 1; }
 
+# --- Pterodactyl (its daemon sets P_SERVER_UUID) --------------------------------------------
+# The server's files live in /home/container (the only writable, persistent place there), and
+# the web panel listens on the port the panel assigned to this server.
+if [ -n "${P_SERVER_UUID:-}" ]; then
+  export HOME=/home/container
+  export TS3_CONFIG_DIR="${TS3_CONFIG_DIR:-/home/container/.ts3client}"
+  export TS3_CLIENT_DIR="${TS3_CLIENT_DIR:-/home/container/ts3client}"
+  export PREFETCH_DIR="${PREFETCH_DIR:-/home/container/cache}"
+  export PANEL_PORT="${PANEL_PORT:-${SERVER_PORT:-8080}}"
+  mkdir -p "$TS3_CONFIG_DIR"
+fi
+
+# --- Started as root (Unraid and similar: --user 0 with PUID/PGID) ---------------------------
+# Hand the writable paths to PUID:PGID, then run everything else as that user, never as root.
+if [ "$(id -u)" = "0" ]; then
+  PUID="${PUID:-1000}"
+  PGID="${PGID:-1000}"
+  [ "$PUID" != "0" ] || die "PUID=0 would run Mendil as root; pick another user id"
+  getent group "$PGID" >/dev/null || echo "mendil:x:${PGID}:" >> /etc/group
+  getent passwd "$PUID" >/dev/null || echo "mendil:x:${PUID}:${PGID}::${HOME}:/bin/sh" >> /etc/passwd
+  for dir in "$HOME" "$HOME/.ts3client" "${TS3_CLIENT_DIR:-/opt/ts3client}" /opt/yt-dlp; do
+    [ -d "$dir" ] || continue
+    # Only walk the tree when ownership is wrong; the TeamSpeak client alone is ~400 files.
+    [ "$(stat -c %u:%g "$dir")" = "${PUID}:${PGID}" ] || chown -R "${PUID}:${PGID}" "$dir"
+  done
+  log "running as ${PUID}:${PGID}"
+  exec setpriv --reuid="$PUID" --regid="$PGID" --clear-groups "$0" "$@"
+fi
+
 TS3_CLIENT_DIR="${TS3_CLIENT_DIR:-/opt/ts3client}"
 TS3_CLIENT_VERSION="${TS3_CLIENT_VERSION:-3.6.2}"
 

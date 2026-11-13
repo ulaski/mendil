@@ -14,6 +14,8 @@ const DOCS = 'site/src/content/docs/reference';
 const INTERNAL = new Set([
   'DISPLAY', 'HOME', 'LD_LIBRARY_PATH', 'PULSE_PID', 'XVFB_PID', 'PULSE_SINK', 'TS3_CLIENT_DIR',
   'TS3_CONFIG_DIR', 'TS3_CLIENTQUERY_PORT', 'YTDLP_VENV', 'PREFETCH_DIR', 'MENDIL_DATA_DIR',
+  // set by Pterodactyl's daemon (see the Pterodactyl guide)
+  'P_SERVER_UUID', 'SERVER_PORT',
 ]);
 
 function sourceFiles(dir) {

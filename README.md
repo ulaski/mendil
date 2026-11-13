@@ -143,6 +143,7 @@ Everything else is on **[ulaski.github.io/mendil](https://ulaski.github.io/mendi
 - [Commands](https://ulaski.github.io/mendil/reference/commands/) and [configuration](https://ulaski.github.io/mendil/reference/configuration/)
 - [YouTube blocks](https://ulaski.github.io/mendil/guides/youtube/), [troubleshooting](https://ulaski.github.io/mendil/help/troubleshooting/) and the [FAQ](https://ulaski.github.io/mendil/help/faq/)
 - [How it works](https://ulaski.github.io/mendil/project/how-it-works/): the two voice engines, Classic and Native
+- [Unraid](https://ulaski.github.io/mendil/guides/unraid/) and [Pterodactyl](https://ulaski.github.io/mendil/guides/pterodactyl/): templates for both
 
 The site's source is in [`site/`](site/). Changes to the docs go there.
 

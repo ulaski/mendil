@@ -1,0 +1,162 @@
+{
+    "_comment": "DO NOT EDIT: FILE GENERATED AUTOMATICALLY BY PTERODACTYL PANEL - PTERODACTYL.IO",
+    "meta": {
+        "version": "PTDL_v2",
+        "update_url": null
+    },
+    "exported_at": "2026-11-13T14:00:00+00:00",
+    "name": "Mendil",
+    "author": "30628206+ulaski@users.noreply.github.com",
+    "description": "Mendil: a music bot for TeamSpeak 3 and 6 servers. People type !play with a song, a YouTube link or a Spotify link in the channel chat, and Mendil plays it in the voice channel. Queue, internet radio, admin and listener roles, and a web panel on this server's port. Uses Mendil's native engine (x86_64 and ARM64). Docs: https://ulaski.github.io/mendil/guides/pterodactyl/",
+    "features": null,
+    "docker_images": {
+        "Mendil (native engine)": "ghcr.io/ulaski/mendil:native"
+    },
+    "file_denylist": [],
+    "startup": "node /app/src/index.js",
+    "config": {
+        "files": "{}",
+        "startup": "{\"done\": \"connected to server\"}",
+        "logs": "{}",
+        "stop": "^C"
+    },
+    "scripts": {
+        "installation": {
+            "script": "#!/bin/bash\n# Mendil ships in its container image; the server folder only holds its data.\nmkdir -p /mnt/server/.ts3client /mnt/server/cache\necho \"Mendil is ready. Set the TeamSpeak server address and start it.\"\n",
+            "container": "ghcr.io/pterodactyl/installers:debian",
+            "entrypoint": "bash"
+        }
+    },
+    "variables": [
+        {
+            "name": "TeamSpeak server",
+            "description": "Address of your TeamSpeak server: host name, IP or host:port. It must be reachable from this node.",
+            "env_variable": "TS3_HOST",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:255",
+            "field_type": "text"
+        },
+        {
+            "name": "TeamSpeak voice port",
+            "description": "Voice port of the TeamSpeak server.",
+            "env_variable": "TS3_PORT",
+            "default_value": "9987",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|integer|between:1,65535",
+            "field_type": "text"
+        },
+        {
+            "name": "Server password",
+            "description": "Only if your TeamSpeak server has a password.",
+            "env_variable": "TS3_SERVER_PASSWORD",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:255",
+            "field_type": "text"
+        },
+        {
+            "name": "Channel",
+            "description": "Channel to join, by name or path (Games/Music). Empty means the default channel.",
+            "env_variable": "TS3_CHANNEL",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:255",
+            "field_type": "text"
+        },
+        {
+            "name": "Channel password",
+            "description": "Only if that channel has a password.",
+            "env_variable": "TS3_CHANNEL_PASSWORD",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:255",
+            "field_type": "text"
+        },
+        {
+            "name": "Nickname",
+            "description": "The bot's nickname in TeamSpeak.",
+            "env_variable": "BOT_NICKNAME",
+            "default_value": "Mendil",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:30",
+            "field_type": "text"
+        },
+        {
+            "name": "Chat language",
+            "description": "en or tr.",
+            "env_variable": "BOT_LANGUAGE",
+            "default_value": "en",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|in:en,tr",
+            "field_type": "text"
+        },
+        {
+            "name": "Admin unique IDs",
+            "description": "Comma-separated TeamSpeak unique IDs of admins (type !whoami in TeamSpeak to see yours). Leave both admin fields empty and everyone is an admin.",
+            "env_variable": "ADMIN_UIDS",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:2000",
+            "field_type": "text"
+        },
+        {
+            "name": "Admin groups",
+            "description": "Comma-separated server group IDs of admins.",
+            "env_variable": "ADMIN_GROUPS",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:255",
+            "field_type": "text"
+        },
+        {
+            "name": "Web panel password",
+            "description": "Admin password for the web panel, which listens on this server's port. Empty: one is generated on first start and printed in the console.",
+            "env_variable": "PANEL_PASSWORD",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:255",
+            "field_type": "text"
+        },
+        {
+            "name": "Radio stations",
+            "description": "Internet radio for when the queue is empty, as name=stream address, comma-separated.",
+            "env_variable": "RADIO_STATIONS",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:2000",
+            "field_type": "text"
+        },
+        {
+            "name": "Radio station",
+            "description": "A station name or stream address that plays whenever the queue is empty.",
+            "env_variable": "RADIO",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:255",
+            "field_type": "text"
+        },
+        {
+            "name": "Update yt-dlp at runtime",
+            "description": "Off here: the yt-dlp inside the image isn't writable for Pterodactyl's user. New yt-dlp versions come with new Mendil images.",
+            "env_variable": "YTDLP_AUTO_UPDATE",
+            "default_value": "false",
+            "user_viewable": true,
+            "user_editable": false,
+            "rules": "required|string|in:true,false",
+            "field_type": "text"
+        }
+    ]
+}

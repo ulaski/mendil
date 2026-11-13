@@ -45,4 +45,5 @@ All settings are environment variables, usually set in `.env`.
 | `PANEL_PASSWORD` | | Admin password for the web panel. If empty, one is generated on first start and printed in the log. Everyone else signs in with their TeamSpeak nickname. |
 | `TS3_CLIENT_VERSION` | `3.6.2` | TeamSpeak client version to download |
 | `TS3_CLIENT_SHA256` | | Expected SHA-256 of that download. Known for 3.6.2; set it if you change the version. |
+| `PUID` / `PGID` | `1000` | User and group IDs to run as when the container is started as root (`--user 0`), for example `99` / `100` on Unraid. Mendil hands its data folders to that user and never runs as root itself. Without `--user 0` they have no effect. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
