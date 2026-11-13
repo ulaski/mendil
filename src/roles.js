@@ -31,6 +31,15 @@ export function roleFor(bot, { uid, groups = [] }) {
   return adminUids.length === 0 && adminGroups.length === 0 ? 'admin' : 'listener';
 }
 
+/**
+ * Whether MAX_QUEUE_PER_USER applies to `user`. Named admins are exempt; without ADMIN_*
+ * everyone counts as an admin, so then the limit applies to everyone.
+ */
+export function queueLimitApplies(bot, user) {
+  const named = (bot.adminUids?.length ?? 0) > 0 || (bot.adminGroups?.length ?? 0) > 0;
+  return Boolean(user?.uid) && !(named && user.role === 'admin');
+}
+
 /** Whether `user` may skip or remove `track`: admins always, listeners only their own requests. */
 export function mayManage(user, track) {
   if (user.role === 'admin') return true;

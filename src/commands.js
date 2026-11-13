@@ -2,11 +2,24 @@ import { LOOP_MODES } from './player.js';
 import { YOUTUBE_DOCS_URL } from './ytdlp.js';
 import { createRequests } from './requests.js';
 import { formatDuration, safe, trackLink } from './format.js';
-import { mayManage, ROLE_RANK } from './roles.js';
+import { mayManage, queueLimitApplies, ROLE_RANK } from './roles.js';
 import { findStation } from './radio.js';
 import { BlockedUrlError, UrlGuard } from './netguard.js';
 
 const LOOP_ALIASES = { off: 'off', one: 'one', track: 'one', all: 'all', queue: 'all' };
+
+/**
+ * "1:30", "1:02:03" or "90" -> seconds from the start; "+30" / "-10" -> relative to `now`.
+ * Returns null for anything else.
+ */
+export function parseSeekTime(text, now = 0) {
+  const m = String(text ?? '').trim().match(/^([+-])?(\d+(?::[0-5]?\d){0,2})$/);
+  if (!m) return null;
+  const seconds = m[2].split(':').reduce((sum, part) => sum * 60 + Number(part), 0);
+  if (m[1] === '+') return now + seconds;
+  if (m[1] === '-') return Math.max(0, now - seconds);
+  return seconds;
+}
 
 /**
  * Chat commands. Each handler receives (ctx, argText) where ctx has
@@ -33,6 +46,7 @@ export function createCommands(bot) {
       switch (result.error) {
         case 'empty': return ctx.reply(t('usagePlay'));
         case 'queueFull': return ctx.reply(t('queueFull', { max: config.player.maxQueue }));
+        case 'userLimit': return ctx.reply(t('userLimit', { max: result.max }));
         case 'busy': return ctx.reply(t('busy'));
         case 'blockedUrl': return ctx.reply(t('blockedUrl'));
         case 'youtubeBlocked': return ctx.reply(t('youtubeBlocked', { url: YOUTUBE_DOCS_URL }));
@@ -41,9 +55,9 @@ export function createCommands(bot) {
         default: return ctx.reply(t('notFound', { reason: safe(result.reason ?? '') }));
       }
     }
-    const { added, position, wasIdle, playlistTitle, tooLong } = result;
-    if (added.length > 1) {
-      const skipped = tooLong ? t('tooLongSkipped', { count: tooLong }) : '';
+    const { added, position, wasIdle, playlistTitle, tooLong, limited } = result;
+    if (added.length > 1 || limited) {
+      const skipped = (tooLong ? t('tooLongSkipped', { count: tooLong }) : '') + (limited ? t('userLimitSkipped', { count: limited, max: result.max }) : '');
       const msg = playlistTitle
         ? t('playlistAddedFrom', { count: added.length, name: `[b]${safe(playlistTitle)}[/b]` })
         : t('playlistAdded', { count: added.length });
@@ -57,7 +71,8 @@ export function createCommands(bot) {
   }
 
   async function enqueue(ctx, input, { front = false } = {}) {
-    return replyTo(ctx, await requests.request(input, { front, requestedBy: ctx.invokerName, requesterUid: ctx.invokerUid }));
+    const limit = queueLimitApplies(config.bot, ctx.user);
+    return replyTo(ctx, await requests.request(input, { front, requestedBy: ctx.invokerName, requesterUid: ctx.invokerUid, limit }));
   }
 
   function parseIndex(arg, max) {
@@ -103,7 +118,8 @@ export function createCommands(bot) {
         if (!results) return ctx.reply(t('searchFirst'));
         const n = parseIndex(arg, results.length);
         if (!n) return ctx.reply(t('pickRange', { max: results.length }));
-        return replyTo(ctx, requests.admit([results[n - 1]], { requestedBy: ctx.invokerName, requesterUid: ctx.invokerUid }));
+        const limit = queueLimitApplies(config.bot, ctx.user);
+        return replyTo(ctx, requests.admit([results[n - 1]], { requestedBy: ctx.invokerName, requesterUid: ctx.invokerUid, limit }));
       },
     },
     {
@@ -194,6 +210,34 @@ export function createCommands(bot) {
         if (!mayManage(ctx.user, player.queue[n - 1])) return ctx.reply(t('notYours'));
         const removed = player.remove(n);
         return ctx.reply(t('removed', { title: safe(removed.title) }));
+      },
+    },
+    {
+      names: ['move', 'mv'],
+      role: 'admin',
+      run: (ctx, arg) => {
+        const [a, b] = arg.split(/\s+/);
+        const max = player.queue.length;
+        if (max < 2) return ctx.reply(max ? t('moveNothing') : t('queueEmpty'));
+        const from = parseIndex(a, max);
+        const to = parseIndex(b, max);
+        if (!from || !to) return ctx.reply(t('usageMove', { max }));
+        const moved = player.move(from, to);
+        return ctx.reply(t('moved', { title: safe(moved.title), position: to }));
+      },
+    },
+    {
+      names: ['seek', 'goto'],
+      role: 'listener',
+      run: (ctx, arg) => {
+        const tr = player.current;
+        if (!tr) return ctx.reply(t('nothingPlaying'));
+        if (!player.seekable) return ctx.reply(t('seekLive'));
+        if (!mayManage(ctx.user, tr)) return ctx.reply(t('notYours'));
+        const target = parseSeekTime(arg, player.elapsed());
+        if (target === null) return ctx.reply(t('usageSeek'));
+        const at = player.seek(target);
+        return ctx.reply(t('seeked', { time: formatDuration(at), length: formatDuration(tr.duration) }));
       },
     },
     {

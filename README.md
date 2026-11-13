@@ -26,7 +26,7 @@ In Türkiye, people at a *gazino* or *meyhane* used to write their song request 
 ## Features
 
 - 🎵 Plays YouTube links, whole playlists, or the first result for a search. Spotify songs, albums and playlists work too: Mendil finds each song on YouTube.
-- 📝 Has a proper queue: search and pick, play next, skip, pause, loop, shuffle and volume
+- 📝 Has a proper queue: search and pick, play next, skip, pause, seek, move, loop, shuffle and volume, with an optional limit of songs per person
 - 📻 Plays an internet radio station whenever the queue is empty, so the channel never goes quiet. A request interrupts the radio, and it comes back afterwards.
 - 💤 Pauses while nobody is in its channel and carries on when someone joins
 - 🔊 Keeps every track at the same loudness, so nobody has to ride the volume
@@ -224,6 +224,8 @@ Mendil reads its own channel's chat and private messages sent to it. In private 
 | `!np` | `!now`, `!nowplaying` | Show the current track and its progress |
 | `!queue` | `!q`, `!list` | Show the queue |
 | `!remove <number>` | `!rm` | Remove a track from the queue. Listeners can remove only their own songs. |
+| `!seek <1:30 \| +30 \| -10>` | | Jump to a time in the current track. Listeners can seek only their own songs. In the web panel, click the progress bar. |
+| `!move <from> <to>` 🔒 | `!mv` | Move a queued track to another position |
 | `!clear` 🔒 | | Clear the queue (the current track keeps playing) |
 | `!shuffle` 🔒 | | Shuffle the queue |
 | `!loop [off\|one\|all]` 🔒 | `!repeat` | Loop nothing, the current track, or the whole queue |
@@ -296,6 +298,7 @@ All settings are environment variables, usually set in `.env`.
 | `NORMALIZE_AUDIO` | `true` | Loudness-normalise tracks to -16 LUFS |
 | `MAX_QUEUE` | `100` | Max queue length |
 | `MAX_PLAYLIST_ITEMS` | `50` | Max tracks taken from one playlist |
+| `MAX_QUEUE_PER_USER` | `0` | Songs one person may have waiting in the queue; `0` means no limit. Named [admins](#roles) are exempt. A playlist adds only as many songs as fit. |
 | `MAX_TRACK_DURATION` | `0` | Max track length in seconds, live streams included. `0` means unlimited. |
 | `PREFETCH` | `true` | Download tracks before playing them, so there are no gaps and network hiccups don't matter. `false` streams everything. |
 | `PREFETCH_MAX_DURATION` | `1800` | Longer tracks (in seconds) and live streams are streamed instead of downloaded |

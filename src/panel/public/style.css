@@ -180,7 +180,12 @@ input[type="range"] { accent-color: var(--ink); }
 .now-meta { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 6px; color: var(--ink-2); }
 .now-time { font-weight: 600; }
 .now-left { font-weight: 700; color: var(--ink); }
-.progress { height: 4px; margin-top: 12px; border-radius: 2px; background: var(--rule); overflow: hidden; }
+/* The bar sits in a taller strip, so it is easy to hit when seeking is allowed. */
+.seek { margin: 4px 0 -8px; padding: 8px 0; border-radius: 2px; }
+.seek.is-seekable { cursor: pointer; }
+.seek.is-seekable:hover .progress { height: 6px; margin-block: -1px; }
+.seek:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.progress { height: 4px; border-radius: 2px; background: var(--rule); overflow: hidden; }
 .progress span { display: block; height: 100%; width: 0; background: var(--lamp); transition: width .95s linear, background-color .3s; }
 .onair[data-state="paused"] .progress span { background: color-mix(in srgb, var(--lamp) 40%, var(--rule)); }
 .onair[data-state="off"] .progress, .onair[data-state="offline"]:not(.has-track) .progress { visibility: hidden; }

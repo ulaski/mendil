@@ -367,3 +367,25 @@ test('radio: pausing hangs up, resuming reconnects to the live stream', async ()
     await station.close();
   }
 });
+
+test('move reorders the queue; seek restarts the track at the new position', async () => {
+  const { player, calls } = setup();
+  player.queue = [track('ok://a'), track('ok://b'), track('ok://c')];
+  assert.equal(player.move(3, 1).url, 'ok://c');
+  assert.deepEqual(player.queue.map((t) => t.url), ['ok://c', 'ok://a', 'ok://b']);
+  assert.equal(player.move(0, 1), null);
+  player.queue = [];
+
+  player.add([track('ok://long', { duration: 30 })]);
+  await waitFor(() => player.current?.position > 0);
+  assert.equal(player.seek(12.7), 12);
+  await waitFor(() => calls().some((c) => c.bin === 'ffmpeg' && c.args.join(' ').includes('-ss 12')));
+  assert.equal(player.seek(500), 29, 'clamped to the track');
+  player.stop();
+
+  player.add([track('ok://live', { isLive: true, duration: null })]);
+  await waitFor(() => player.current);
+  assert.equal(player.seekable, false);
+  assert.equal(player.seek(10), null);
+  player.stop();
+});

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LOOP_MODES } from '../player.js';
 import { logEvents, recentLogs } from '../log.js';
-import { mayManage, roleFor } from '../roles.js';
+import { mayManage, queueLimitApplies, roleFor } from '../roles.js';
 import { findStation } from '../radio.js';
 
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public');
@@ -145,6 +145,7 @@ export class PanelServer {
       current: player.current ? {
         ...track(player.current), position: Math.floor(player.current.position ?? 0),
         radio: Boolean(player.current.radio), streamTitle: player.current.streamTitle ?? null,
+        seekable: Boolean(player.seekable),
       } : null,
       paused: player.paused,
       waiting: Boolean(this.bot.waitingForListeners), // paused until someone joins the channel
@@ -295,9 +296,13 @@ export class PanelServer {
     switch (route) {
       case '/api/play': {
         const query = String(body.query ?? '').trim().slice(0, 500);
-        const result = await requests.request(query, { front: Boolean(body.next), requestedBy, requesterUid });
-        if (!result.ok) return fail(result.error, 200);
-        return ok({ added: result.added.map((t) => t.title), position: result.position, playlistTitle: result.playlistTitle, tooLong: result.tooLong });
+        const limit = queueLimitApplies(this.config.bot, user);
+        const result = await requests.request(query, { front: Boolean(body.next), requestedBy, requesterUid, limit });
+        if (!result.ok) return { status: 200, body: { ok: false, error: result.error, max: result.max } };
+        return ok({
+          added: result.added.map((t) => t.title), position: result.position, playlistTitle: result.playlistTitle,
+          tooLong: result.tooLong, limited: result.limited ?? 0, max: result.max,
+        });
       }
       case '/api/search': {
         const query = String(body.query ?? '').trim().slice(0, 200);
@@ -327,6 +332,13 @@ export class PanelServer {
       case '/api/shuffle':
         player.shuffle();
         return ok();
+      case '/api/seek': {
+        if (!player.current) return fail('nothingPlaying', 200);
+        if (!player.seekable) return fail('notSeekable', 200);
+        if (!mayManage(user, player.current)) return fail('notYours', 403);
+        const at = player.seek(Number(body.position));
+        return at === null ? fail('badPosition') : ok({ position: at });
+      }
       case '/api/remove': {
         // The URL guards against removing the wrong track if the queue changed meanwhile.
         const index = Number(body.index);

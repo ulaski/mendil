@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- `!seek <1:30 | +30 | -10>` jumps within the current track; in the web panel, click the progress bar (arrow keys work on it too). Listeners can seek their own songs, admins any song. Live streams and the radio can't be sought.
+- `!move <from> <to>` reorders the queue (admins).
+- `MAX_QUEUE_PER_USER` limits how many songs one person can have waiting. A playlist adds only as many as fit, and Mendil says how many it left out. Named admins are exempt. Off (`0`) by default.
+
 ## [0.5.0] - 2026-11-13
 
 Radio for when the queue is empty, and a pause while nobody is listening.

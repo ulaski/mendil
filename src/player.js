@@ -191,6 +191,15 @@ export class Player extends EventEmitter {
     return removed ?? null;
   }
 
+  /** Moves the queued track at `from` to `to` (both 1-based); returns it or null. */
+  move(from, to) {
+    if (from < 1 || from > this.queue.length || to < 1 || to > this.queue.length) return null;
+    const [track] = this.queue.splice(from - 1, 1);
+    this.queue.splice(to - 1, 0, track);
+    this.#syncPrefetch();
+    return track;
+  }
+
   clear() {
     const count = this.queue.length;
     this.queue = [];
@@ -273,6 +282,27 @@ export class Player extends EventEmitter {
     this.paused = false;
     this.#procs.lastProgressAt = Date.now();
     return true;
+  }
+
+  /** Whether the current track can be sought: a known length, not live, not the radio. */
+  get seekable() {
+    const c = this.current;
+    return Boolean(c) && !c.isLive && !c.radio && !c.search && Number.isFinite(c.duration) && c.duration > 0;
+  }
+
+  /**
+   * Jumps to `seconds` in the current track (clamped to it) and plays from there, also when
+   * paused. Returns the new position, or null if the track can't be sought.
+   */
+  seek(seconds) {
+    if (!this.seekable || !Number.isFinite(seconds)) return null;
+    const to = Math.max(0, Math.min(Math.floor(seconds), this.current.duration - 1));
+    this.#killProcs();
+    this.paused = false;
+    this.current.position = to;
+    this.current.retries = 0;
+    this.#load(this.current, to);
+    return to;
   }
 
   /** Seconds played of the current track. */

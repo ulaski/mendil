@@ -83,6 +83,8 @@ export function loadConfig() {
       defaultVolume: int(env.DEFAULT_VOLUME, 70, { min: 0, max: 100 }),
       normalize: bool(env.NORMALIZE_AUDIO, true),
       maxQueue: int(env.MAX_QUEUE, 100, { min: 1 }),
+      // Songs one person may have waiting in the queue (0 = no limit); named admins are exempt.
+      maxQueuePerUser: int(env.MAX_QUEUE_PER_USER, 0, { min: 0 }),
       maxPlaylistItems: int(env.MAX_PLAYLIST_ITEMS, 50, { min: 1 }),
       maxTrackDuration: int(env.MAX_TRACK_DURATION, 0, { min: 0 }),
       allowPrivateUrls: bool(env.ALLOW_PRIVATE_URLS, false),

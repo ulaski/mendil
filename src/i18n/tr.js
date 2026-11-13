@@ -67,6 +67,16 @@ export default {
   joinFailed: 'Kanala geçemedim: {reason}',
   clientNotFound: 'seni bulamadım',
 
+  // sarma / taşıma / kişi başı sınır
+  usageSeek: 'Kullanım: {prefix}seek <1:30 | 90 | +30 | -10>',
+  seeked: '{time} anına atlandı (parça {length}).',
+  seekLive: 'Canlı yayınlarda ve radyoda ileri geri sarılamaz.',
+  usageMove: 'Kullanım: {prefix}move <nereden> <nereye>; {prefix}queue listesindeki 1 ile {max} arası numaralar.',
+  moveNothing: 'Kuyrukta tek parça var.',
+  moved: '{title} {position}. sıraya taşındı.',
+  userLimit: 'Kuyrukta zaten bekleyen {max} şarkın var. Biri çaldıktan sonra yenisini isteyebilirsin.',
+  userLimitSkipped: ' ({count} tanesi eklenmedi: kişi başı en fazla {max} şarkı)',
+
   // radyo
   radioOn: '📻 Radyo: {station}',
   radioNow: '📻 {station}: {title}',
@@ -98,6 +108,8 @@ export default {
     shuffle: 'Kuyruğu karıştırır',
     loop: 'Tekrar modu: kapalı / şarkı / liste',
     vol: 'Ses seviyesini gösterir / ayarlar',
+    move: 'Kuyruktaki bir parçayı başka bir sıraya taşır',
+    seek: 'Çalan parçada bir ana atlar (kendi şarkıların; yöneticiler: hepsi)',
     radio: 'Kuyruk boşken çalan radyo: durumu gösterir, istasyon seçer ya da kapatır',
     join: 'Botu bulunduğun kanala çeker',
     whoami: 'Benzersiz kimliğini ve sunucu gruplarını gösterir (yetki ayarı için)',
@@ -112,6 +124,8 @@ export default {
     loop: '[off|one|all]',
     vol: '[0-100]',
     radio: '[isim | link | off]',
+    move: '<nereden> <nereye>',
+    seek: '<1:30 | +30 | -10>',
   },
 
   commandAliases: {
@@ -131,6 +145,8 @@ export default {
     loop: ['tekrar'],
     vol: ['ses'],
     radio: ['radyo'],
+    move: ['tasi', 'taşı'],
+    seek: ['sar', 'git'],
     join: ['gel'],
     whoami: ['kimim', 'ben'],
     help: ['yardim', 'yardım', 'komutlar'],

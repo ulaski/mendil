@@ -26,6 +26,8 @@ const STRINGS = {
     loop: 'Repeat', loopOff: 'Off', loopOne: 'Track', loopAll: 'Queue',
     radio: 'Radio', radioOff: 'Off', radioHint: 'Plays whenever the running order is empty. Requests interrupt it.',
     radioBy: 'Radio: {name}', thenRadio: 'then radio', lampWaiting: 'NO LISTENERS',
+    position: 'Position', positionOf: '{time} of {length}',
+    limitedNote: ' ({count} left out: at most {max} songs per person)',
     queueEmptyRadio: 'Nothing scheduled, so the radio is on. Requests from the panel and from TeamSpeak chat interrupt it.',
     log: 'Log', logMore: 'Show more', logLess: 'Show less',
     connected: 'In {channel}', connectedNoName: 'Connected', disconnected: 'Not connected', reconnecting: 'Reconnecting since {time}',
@@ -41,6 +43,8 @@ const STRINGS = {
       notOnline: "Nobody with that nickname is on the server. Check the spelling, or join first.",
       notAllowed: "You're not allowed to use this bot.", codeRecentlySent: 'A code was sent a moment ago. Check your TeamSpeak chat, or wait half a minute.',
       unknownStation: 'That station is not in RADIO_STATIONS.',
+      userLimit: 'You already have {max} songs waiting. Request more once one has played.',
+      notSeekable: "Live streams and the radio can't be sought.",
       wrongCode: "That code didn't match.", codeExpired: 'That code has expired. Ask for a new one.',
       teamspeakOffline: "Mendil isn't connected to TeamSpeak right now. Use the panel password.",
     },
@@ -71,6 +75,8 @@ const STRINGS = {
     loop: 'Tekrar', loopOff: 'Kapalı', loopOne: 'Parça', loopAll: 'Kuyruk',
     radio: 'Radyo', radioOff: 'Kapalı', radioHint: 'Yayın akışı boşken çalar. Gelen istekler radyoyu keser.',
     radioBy: 'Radyo: {name}', thenRadio: 'sonra radyo', lampWaiting: 'DİNLEYEN YOK',
+    position: 'Konum', positionOf: '{time} / {length}',
+    limitedNote: ' ({count} tanesi eklenmedi: kişi başı en fazla {max} şarkı)',
     queueEmptyRadio: 'Akışta bir şey yok, o yüzden radyo çalıyor. Panelden ve TeamSpeak sohbetinden gelen istekler radyoyu keser.',
     log: 'Log', logMore: 'Daha fazla', logLess: 'Daha az',
     connected: '{channel} kanalında', connectedNoName: 'Bağlı', disconnected: 'Bağlı değil', reconnecting: '{time} saatinden beri yeniden bağlanıyor',
@@ -86,6 +92,8 @@ const STRINGS = {
       notOnline: 'Sunucuda bu takma adla kimse yok. Yazımı kontrol et ya da önce sunucuya gir.',
       notAllowed: 'Bu botu kullanma yetkin yok.', codeRecentlySent: 'Az önce bir kod gönderildi. TeamSpeak sohbetine bak ya da yarım dakika bekle.',
       unknownStation: "Bu istasyon RADIO_STATIONS'ta yok.",
+      userLimit: 'Bekleyen {max} şarkın var. Biri çaldıktan sonra yenisini isteyebilirsin.',
+      notSeekable: 'Canlı yayınlarda ve radyoda ileri geri sarılamaz.',
       wrongCode: 'Kod tutmadı.', codeExpired: 'Bu kodun süresi doldu. Yenisini iste.',
       teamspeakOffline: "Mendil şu an TeamSpeak'e bağlı değil. Panel şifresini kullan.",
     },
@@ -176,7 +184,7 @@ async function api(method, path, body) {
 
 function errorText(result) {
   const key = `errors.${result.error}`;
-  const text = t(key, { reason: result.reason ?? '' });
+  const text = t(key, { reason: result.reason ?? '', max: result.max ?? '' });
   return text === key ? t('errors.generic', { error: result.error }) : text;
 }
 
@@ -321,6 +329,7 @@ function renderOnAir(s) {
   $('now-left').textContent = c && !c.isLive && Number.isFinite(c.duration) ? t('left', { time: duration(c.duration - c.position) }) : '';
   const pct = c?.duration ? Math.min(100, (c.position / c.duration) * 100) : 0;
   $('progress-bar').style.width = `${pct}%`;
+  renderSeek(c);
 
   const id = c ? youtubeId(c.url) : null;
   const thumb = $('thumb');
@@ -340,6 +349,52 @@ function renderOnAir(s) {
     $('volume-value').textContent = s.volume;
   }
 }
+
+// Seeking: click or tap the bar, or arrow keys on it. Admins, or your own song.
+function canSeek(c) {
+  return Boolean(c?.seekable) && (isAdmin() || isMine(c));
+}
+
+function renderSeek(c) {
+  const seek = $('seek');
+  const on = canSeek(c);
+  seek.classList.toggle('is-seekable', on);
+  if (!on) {
+    for (const a of ['role', 'tabindex', 'aria-label', 'aria-valuemin', 'aria-valuemax', 'aria-valuenow', 'aria-valuetext']) seek.removeAttribute(a);
+    return;
+  }
+  seek.setAttribute('role', 'slider');
+  seek.tabIndex = 0;
+  seek.setAttribute('aria-label', t('position'));
+  seek.setAttribute('aria-valuemin', '0');
+  seek.setAttribute('aria-valuemax', String(Math.floor(c.duration)));
+  seek.setAttribute('aria-valuenow', String(Math.floor(c.position)));
+  seek.setAttribute('aria-valuetext', t('positionOf', { time: duration(c.position), length: duration(c.duration) }));
+}
+
+async function seekTo(position) {
+  const c = state?.current;
+  if (!canSeek(c)) return;
+  const result = await api('POST', '/api/seek', { position: Math.max(0, Math.min(c.duration - 1, position)) });
+  if (!result.ok) showResult(errorText(result), true);
+}
+
+$('seek').addEventListener('click', (e) => {
+  const c = state?.current;
+  if (!canSeek(c)) return;
+  const box = $('seek').getBoundingClientRect();
+  seekTo(((e.clientX - box.left) / box.width) * c.duration);
+});
+
+$('seek').addEventListener('keydown', (e) => {
+  const c = state?.current;
+  if (!canSeek(c)) return;
+  const step = { ArrowLeft: -10, ArrowRight: 10, PageDown: -60, PageUp: 60 }[e.key];
+  if (e.key === 'Home') seekTo(0);
+  else if (step) seekTo(c.position + step);
+  else return;
+  e.preventDefault();
+});
 
 function renderOrder(s) {
   const { times, end } = airTimes(s);
@@ -508,8 +563,9 @@ async function requestSong(query, next) {
   if (!result.ok) return showResult(errorText(result), true);
   $('query').value = '';
   $('results').hidden = true;
-  const skipped = result.tooLong ? t('skippedLong', { count: result.tooLong }) : '';
-  if (result.added.length > 1) {
+  const skipped = (result.tooLong ? t('skippedLong', { count: result.tooLong }) : '')
+    + (result.limited ? t('limitedNote', { count: result.limited, max: result.max }) : '');
+  if (result.added.length > 1 || result.limited) {
     const from = result.playlistTitle ? t('from', { name: result.playlistTitle }) : '';
     return showResult(t('addedMany', { count: result.added.length, from }) + skipped);
   }

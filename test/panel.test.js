@@ -138,8 +138,8 @@ test('POSTs without the X-Mendil header are refused (CSRF)', async () => {
 test('actions go through: play, skip, volume, loop, remove', async () => {
   const cookie = await login();
   const play = await call('POST', '/api/play', { cookie, body: { query: 'fontaines dc', next: true } });
-  assert.deepEqual(play.json, { ok: true, added: ['fontaines dc'], position: 2, playlistTitle: null, tooLong: 0 });
-  assert.deepEqual(requested.at(-1), { query: 'fontaines dc', front: true, requestedBy: 'the web panel', requesterUid: null });
+  assert.deepEqual(play.json, { ok: true, added: ['fontaines dc'], position: 2, playlistTitle: null, tooLong: 0, limited: 0 });
+  assert.deepEqual(requested.at(-1), { query: 'fontaines dc', front: true, requestedBy: 'the web panel', requesterUid: null, limit: false });
   assert.equal((await call('POST', '/api/skip', { cookie })).json.ok, true);
   assert.equal(player.skipped, true);
   assert.equal((await call('POST', '/api/volume', { cookie, body: { volume: 55 } })).json.volume, 55);
@@ -211,7 +211,7 @@ test('roles: listeners request and manage their own songs, admins do the rest', 
 
     // Requests are attributed to the TeamSpeak user.
     assert.equal((await call('POST', '/api/play', { cookie: listener, body: { query: 'mimesis' } })).json.ok, true);
-    assert.deepEqual(requested.at(-1), { query: 'mimesis', front: false, requestedBy: 'Cem', requesterUid: 'uid-cem' });
+    assert.deepEqual(requested.at(-1), { query: 'mimesis', front: false, requestedBy: 'Cem', requesterUid: 'uid-cem', limit: true });
 
     for (const [route, body] of [['/api/radio', { station: null }], ['/api/stop'], ['/api/pause'], ['/api/clear'], ['/api/shuffle'], ['/api/volume', { volume: 10 }], ['/api/loop', { mode: 'one' }], ['/api/play', { query: 'x', next: true }]]) {
       const res = await call('POST', route, { cookie: listener, body: body ?? {} });
@@ -226,6 +226,16 @@ test('roles: listeners request and manage their own songs, admins do the rest', 
     player.current = { title: 'Mine', url: 'https://m', requesterUid: 'uid-cem' };
     assert.equal((await call('POST', '/api/skip', { cookie: listener })).json.ok, true);
     assert.equal(player.skipped, true);
+
+    // Seeking: your own song only, and only when it can be sought.
+    player.seekable = true;
+    player.seek = (p) => { player.soughtTo = p; return p; };
+    player.current = { title: 'Theirs', url: 'https://t', requesterUid: 'uid-other', duration: 200 };
+    assert.equal((await call('POST', '/api/seek', { cookie: listener, body: { position: 30 } })).json.error, 'notYours');
+    player.current = { title: 'Mine', url: 'https://m', requesterUid: 'uid-cem', duration: 200 };
+    assert.equal((await call('POST', '/api/seek', { cookie: listener, body: { position: 30 } })).json.position, 30);
+    player.seekable = false;
+    assert.equal((await call('POST', '/api/seek', { cookie: listener, body: { position: 30 } })).json.error, 'notSeekable');
 
     player.queue = [{ title: 'A', url: 'https://a', requesterUid: 'uid-other' }, { title: 'B', url: 'https://b', requesterUid: 'uid-cem' }];
     assert.equal((await call('POST', '/api/remove', { cookie: listener, body: { index: 1, url: 'https://a' } })).json.error, 'notYours');

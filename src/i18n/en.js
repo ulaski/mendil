@@ -77,6 +77,16 @@ export default {
   joinFailed: "Couldn't join your channel: {reason}",
   clientNotFound: "couldn't find you",
 
+  // seek / move / per-user limit
+  usageSeek: 'Usage: {prefix}seek <1:30 | 90 | +30 | -10>',
+  seeked: 'Jumped to {time} of {length}.',
+  seekLive: "Live streams and the radio can't be sought.",
+  usageMove: 'Usage: {prefix}move <from> <to>, numbers between 1 and {max} from {prefix}queue.',
+  moveNothing: 'There is only one track in the queue.',
+  moved: 'Moved {title} to position {position}.',
+  userLimit: 'You already have {max} songs waiting in the queue. Request more once one has played.',
+  userLimitSkipped: ' ({count} left out: at most {max} songs per person)',
+
   // radio
   radioOn: '📻 Radio: {station}',
   radioNow: '📻 {station}: {title}',
@@ -109,6 +119,8 @@ export default {
     shuffle: 'Shuffle the queue',
     loop: 'Loop mode: off / track / queue',
     vol: 'Show or set the volume',
+    move: 'Move a queued track to another position',
+    seek: 'Jump to a time in the current track (your own songs; admins: any)',
     radio: 'Radio for when the queue is empty: show it, pick a station, or turn it off',
     join: 'Move the bot to your channel',
     whoami: 'Show your unique ID and server groups (for access control)',
@@ -123,6 +135,8 @@ export default {
     loop: '[off|one|all]',
     vol: '[0-100]',
     radio: '[name | link | off]',
+    move: '<from> <to>',
+    seek: '<1:30 | +30 | -10>',
   },
 
   // extra command names / loop mode names for this language (English ones always work)
