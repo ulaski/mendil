@@ -5,6 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+- The native engine's "from source" instructions built an untagged image, so Compose pulled the published one instead; the README now adds a `build` section. `.env.example` no longer sets `VOICE_BACKEND`, which had overridden the native image's engine.
+
 ## [0.2.0] - 2026-11-13
 
 A web panel, and a second, experimental voice engine that works without the TeamSpeak client.

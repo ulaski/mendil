@@ -154,7 +154,17 @@ volumes:
   ts3client-data:
 ```
 
-`TS3CLIENT_LICENSE` isn't needed, because no TeamSpeak client is downloaded. Everything else in `.env` stays the same. From source, build it with `docker build --target native .`.
+`TS3CLIENT_LICENSE` isn't needed, because no TeamSpeak client is downloaded. Everything else in `.env` stays the same; if your `.env` sets `VOICE_BACKEND=classic`, remove that line.
+
+From source, add a `build` section to the same service, so Compose builds the native image instead of downloading it:
+
+```yaml
+    build:
+      context: .
+      target: native
+```
+
+and start it with `docker compose up -d --build`.
 </details>
 
 ### Web panel
@@ -246,7 +256,7 @@ All settings are environment variables, usually set in `.env`.
 | `YTDLP_COOKIES_FILE` | | Cookies file for YouTube, see [docs/youtube.md](docs/youtube.md) |
 | `YTDLP_PROXY` | | Proxy for YouTube traffic only, e.g. `socks5://user:pass@host:1080` |
 | `ALLOW_PRIVATE_URLS` | `false` | Let `!play` open addresses on private networks (LAN, localhost), e.g. a media server at home. Off by default, see [SECURITY.md](SECURITY.md). |
-| `VOICE_BACKEND` | `classic` | `classic` (official TeamSpeak client) or `native`, see [How it works](#how-it-works). The `native` image sets it for you. |
+| `VOICE_BACKEND` | per image | `classic` (official TeamSpeak client) or `native`, see [How it works](#how-it-works). Each image sets its own; only set this to run the native engine inside the classic image. |
 | `NATIVE_BITRATE` | `128` | Native engine only: Opus bitrate in kbit/s, 48 to 192 |
 | `PANEL_PORT` | `8080` | Port of the web panel inside the container. `0` turns it off. |
 | `PANEL_TRUST_PROXY` | `false` | Set to `true` when the panel is behind a reverse proxy, so the login limit applies per client instead of to the proxy |
