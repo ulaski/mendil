@@ -1,0 +1,55 @@
+---
+// The page title as a jukebox title strip. Its selection code (B3 = third page of the second
+// sidebar group) matches the code the sidebar shows next to the same page.
+const { entry, sidebar } = Astro.locals.starlightRoute;
+
+let code = null;
+sidebar.forEach((group, g) => {
+  if (group.type !== 'group') return;
+  group.entries.forEach((item, i) => {
+    if (item.type === 'link' && item.isCurrent) code = `${String.fromCharCode(65 + g)}${i + 1}`;
+  });
+});
+---
+
+<div class="title-strip">
+  {code && <span class="title-strip__code" aria-hidden="true">{code}</span>}
+  <h1 id="_top">{entry.data.title}</h1>
+</div>
+
+<style>
+  .title-strip {
+    display: flex;
+    align-items: stretch;
+    margin-top: 1rem;
+    background: var(--mendil-strip);
+    color: var(--mendil-strip-ink);
+    border-top: 0.5rem solid var(--mendil-coral);
+    border-bottom: 0.5rem solid var(--mendil-teal);
+    border-radius: 3px;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.18), 0 6px 18px -10px rgb(0 0 0 / 0.35);
+  }
+  .title-strip__code {
+    display: grid;
+    place-items: center;
+    min-width: 3.4rem;
+    padding: 0 0.75rem;
+    border-right: 1px solid color-mix(in srgb, var(--mendil-strip-ink) 22%, transparent);
+    font-family: var(--mendil-display);
+    font-stretch: 70%;
+    font-weight: 800;
+    font-size: 1.25rem;
+    letter-spacing: 0.04em;
+    font-variant-numeric: tabular-nums;
+  }
+  h1 {
+    margin: 0;
+    padding: 0.55rem 1rem 0.6rem;
+    font-family: var(--mendil-typed);
+    font-weight: 700;
+    font-size: var(--sl-text-h1);
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    color: inherit;
+  }
+</style>

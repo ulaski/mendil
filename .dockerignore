@@ -8,3 +8,5 @@ test
 *.md
 LICENSE
 docker-compose*.yml
+# the documentation site has its own build (.github/workflows/docs.yml)
+site

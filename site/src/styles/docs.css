@@ -1,0 +1,186 @@
+/*
+ * Mendil docs: the jukebox world, quietly. The cabinet (deep teal) carries the header, the
+ * title strips (cream card, coral band over teal band) carry page titles, and the selection
+ * codes (A1, B3…) run through the sidebar. The reading column itself stays plain.
+ */
+
+:root {
+  --mendil-coral: #f2655a;
+  --mendil-teal: #0e6e73;
+  --mendil-cream: #fbf1de;
+  --mendil-cabinet: #0b2e30;
+  --mendil-strip: #fbf1de;
+  --mendil-strip-ink: #1b1d1f;
+  --mendil-display: 'Archivo Variable', 'Archivo', system-ui, sans-serif;
+  --mendil-typed: 'Courier Prime', 'Courier New', monospace;
+
+  --sl-font: var(--mendil-display);
+  --sl-font-system-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --sl-line-height: 1.7;
+}
+
+/* Dark: the cabinet at night. */
+:root {
+  --sl-color-accent-low: #3d1e1b;
+  --sl-color-accent: #f2655a;
+  --sl-color-accent-high: #ffc3bc;
+  --sl-color-white: #f4f1ea;
+  --sl-color-gray-1: #e2e7e6;
+  --sl-color-gray-2: #c4cdcc;
+  --sl-color-gray-3: #93a3a2;
+  --sl-color-gray-4: #5d7170;
+  --sl-color-gray-5: #34494a;
+  --sl-color-gray-6: #1a3133;
+  --sl-color-black: #0e2123;
+}
+
+/* Light: a pale teal-grey ground, so the cream strips stand off it. */
+:root[data-theme='light'] {
+  --sl-color-accent-low: #d3ecec;
+  --sl-color-accent: #0e6e73;
+  --sl-color-accent-high: #073f42;
+  --sl-color-white: #12191a;
+  --sl-color-gray-1: #1d2a2b;
+  --sl-color-gray-2: #34494a;
+  --sl-color-gray-3: #556b6b;
+  --sl-color-gray-4: #84999a;
+  --sl-color-gray-5: #c2cfcf;
+  --sl-color-gray-6: #e3eaea;
+  --sl-color-gray-7: #eef3f3;
+  --sl-color-black: #f6f9f9;
+}
+
+/* The header is always the cabinet top rail (header.header only: code-block frames use .header too). */
+header.header {
+  background: var(--mendil-cabinet);
+  border-bottom: 3px solid var(--mendil-coral);
+  --sl-color-white: #f4f1ea;
+  --sl-color-gray-1: #e2e7e6;
+  --sl-color-gray-2: #c4cdcc;
+  --sl-color-gray-3: #a9b9b8;
+  --sl-color-gray-5: #34494a;
+  --sl-color-gray-6: #1a3133;
+  --sl-color-black: #0b2e30;
+  color: #f4f1ea;
+}
+header.header .site-title {
+  font-weight: 800;
+  font-stretch: 85%;
+  font-size: 1.3rem;
+  letter-spacing: -0.01em;
+  color: #f4f1ea;
+}
+header.header .site-title img {
+  height: 2.1rem;
+  width: auto;
+}
+
+/* Sidebar: every page carries its selection code, letter = group, number = position. */
+.sidebar-content ul.top-level > li {
+  counter-increment: mendil-group;
+  counter-reset: mendil-item;
+}
+.sidebar-content ul.top-level > li li {
+  counter-increment: mendil-item;
+}
+.sidebar-content ul.top-level > li li a::before {
+  content: counter(mendil-group, upper-alpha) counter(mendil-item);
+  display: inline-block;
+  min-width: 2.1rem;
+  font-stretch: 70%;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+  color: var(--sl-color-gray-3);
+}
+.sidebar-content ul.top-level > li li a[aria-current='page']::before {
+  color: inherit;
+}
+/* The selected page reads as a pressed selection: coral at night, teal by day. */
+:root:not([data-theme='light']) .sidebar-content a[aria-current='page'] {
+  background-color: var(--mendil-coral);
+  color: #1b1d1f;
+}
+.sidebar-content .group-label .large {
+  font-stretch: 80%;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+/* Reading column. */
+.sl-markdown-content :is(h2, h3) {
+  font-stretch: 88%;
+  font-weight: 780;
+  letter-spacing: -0.01em;
+}
+.sl-markdown-content h2 {
+  margin-top: 2.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--sl-color-gray-5);
+}
+.sl-markdown-content a {
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+}
+.sl-markdown-content a:hover {
+  text-decoration-thickness: 2px;
+}
+.sl-markdown-content table {
+  font-variant-numeric: tabular-nums;
+}
+.sl-markdown-content :not(pre) > code {
+  border-radius: 3px;
+}
+/* A command stays in one piece in the first column of a table. */
+.sl-markdown-content td:first-child code {
+  white-space: nowrap;
+}
+/* Admin-only marker, in palette ink (no emoji). */
+.admin-tag {
+  display: inline-block;
+  margin-inline: 0.15em;
+  padding: 0 0.45em;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.72em;
+  font-weight: 750;
+  font-stretch: 90%;
+  line-height: 1.5;
+  vertical-align: 0.12em;
+  color: var(--sl-color-gray-2);
+  white-space: nowrap;
+}
+/* On phones, table rows stack: the first cell (the command or setting) on top, then the rest. */
+@media (max-width: 640px) {
+  .sl-markdown-content table,
+  .sl-markdown-content tbody,
+  .sl-markdown-content tr,
+  .sl-markdown-content td {
+    display: block;
+    width: auto;
+  }
+  .sl-markdown-content thead {
+    display: none;
+  }
+  .sl-markdown-content tr {
+    padding: 0.7rem 0;
+    border-bottom: 1px solid var(--sl-color-gray-5);
+  }
+  .sl-markdown-content td {
+    padding: 0.1rem 0;
+    border: 0;
+  }
+  .sl-markdown-content td:first-child {
+    font-weight: 700;
+  }
+  /* Middle columns say what they are (Aliases:, Default:); the last one is the description. */
+  .sl-markdown-content td[data-label]:not(:first-child):not(:last-child)::before {
+    content: attr(data-label) ': ';
+    font-size: 0.85em;
+    font-weight: 650;
+    color: var(--sl-color-gray-3);
+  }
+  .sl-markdown-content td:empty {
+    display: none;
+  }
+}

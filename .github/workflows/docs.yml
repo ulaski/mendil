@@ -1,0 +1,42 @@
+# Builds the documentation site (site/) and publishes it to GitHub Pages:
+# https://ulaski.github.io/mendil/
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths: ['site/**', 'CONTRIBUTING.md', 'CHANGELOG.md', 'docs/assets/**', '.github/workflows/docs.yml']
+  pull_request:
+    paths: ['site/**', '.github/workflows/docs.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Installs from site/package-lock.json, runs `npm run build` (which first syncs
+      # CONTRIBUTING.md and CHANGELOG.md) and uploads the Pages artifact.
+      - uses: withastro/action@v6
+        with:
+          path: ./site
+
+  deploy:
+    if: github.event_name != 'pull_request' # pull requests only check that the site builds
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

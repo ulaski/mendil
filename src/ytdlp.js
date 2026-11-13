@@ -28,9 +28,9 @@ export function isGlobalError(text) {
 export const MAX_FILESIZE = '200M';
 export const MAX_FILESIZE_BYTES = 200 * 1024 * 1024;
 
-export const YOUTUBE_DOCS_URL = 'https://github.com/ulaski/mendil/blob/main/docs/youtube.md';
+export const YOUTUBE_DOCS_URL = 'https://ulaski.github.io/mendil/guides/youtube/';
 
-/** YouTube refusing this server (usually a data-center IP); see docs/youtube.md. */
+/** YouTube refusing this server (usually a data-center IP); see YOUTUBE_DOCS_URL. */
 export function isYoutubeBlock(text) {
   return /confirm you.?re not a bot|sign in to confirm|HTTP Error 429/i.test(text);
 }

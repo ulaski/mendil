@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- **Documentation site:** https://ulaski.github.io/mendil/, with a landing page and searchable docs, built with Astro Starlight from `site/` and published by GitHub Actions.
+- A test that fails when a setting the code reads or a chat command is missing from the docs.
+
+### Changed
+- The README is shorter and links to the docs site for details. `PANEL_HOST` is now documented.
+- The chat message about YouTube blocks links to the docs site's YouTube page; `docs/youtube.md` points there too.
+
 ## [0.6.1] - 2026-11-13
 
 ### Fixed

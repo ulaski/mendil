@@ -1,0 +1,576 @@
+---
+// Landing page: the front of a jukebox. Title strips carry the headline, the install steps and
+// the facts; the record window holds the real TeamSpeak recording; the selection rack below
+// plays example chat exchanges.
+import '@fontsource-variable/archivo/wdth.css';
+import '@fontsource/courier-prime/400.css';
+import '@fontsource/courier-prime/700.css';
+import demo from '../assets/demo.gif';
+import logo from '../assets/logo.png';
+import pkg from '../../../package.json';
+
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+const docs = (slug) => `${base}${slug}/`;
+const repo = 'https://github.com/ulaski/mendil';
+
+const install = [
+  'mkdir mendil && cd mendil',
+  'curl -fsSLO https://raw.githubusercontent.com/ulaski/mendil/main/docker-compose.yml',
+  'curl -fsSL -o .env https://raw.githubusercontent.com/ulaski/mendil/main/.env.example',
+];
+
+// Example exchanges, written with Mendil's real reply texts (src/i18n/en.js).
+const selections = [
+  {
+    code: 'C1', label: 'Search or link', command: '!play <song or link>',
+    lines: [
+      ['Deniz', '!play fontaines d.c. mimesis'],
+      ['Mendil', '▶ Now playing: Fontaines D.C. - Mimesis (Lyric Video) (3:52) — requested by Deniz'],
+    ],
+  },
+  {
+    code: 'C2', label: 'Spotify albums', command: '!play <Spotify link>',
+    lines: [
+      ['Ece', '!play https://open.spotify.com/album/…'],
+      ['Mendil', 'Added 11 tracks from Romance to the queue.'],
+    ],
+  },
+  {
+    code: 'C3', label: 'The queue', command: '!queue',
+    lines: [
+      ['Mert', '!queue'],
+      ['Mendil', '▶ Fontaines D.C. - Starburster (4:25)\n1. Fontaines D.C. - Mimesis (3:52) — Deniz\n2. Fontaines D.C. - Favourite (4:42) — Ece\nIn queue: 2, ~8:34 total — loop: off'],
+    ],
+  },
+  {
+    code: 'C4', label: 'Jump ahead', command: '!seek 1:30',
+    lines: [
+      ['Deniz', '!seek 1:30'],
+      ['Mendil', 'Jumped to 1:30 of 3:52.'],
+    ],
+  },
+  {
+    code: 'C5', label: 'Radio when it’s quiet', command: '!radio <station>',
+    lines: [
+      ['Ece', '!radio radio paradise'],
+      ['Mendil', '📻 Radio on: Radio Paradise. It plays whenever the queue is empty.'],
+    ],
+  },
+  {
+    code: 'C6', label: 'Admins and listeners', command: '!skip',
+    lines: [
+      ['Mert', '!skip'],
+      ['Mendil', 'You can only skip or remove songs you requested.'],
+    ],
+  },
+];
+const first = selections[0];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mendil · song requests for your TeamSpeak server</title>
+    <meta name="description" content="A self-hosted music bot for TeamSpeak 3 and 6. Write a song in chat and Mendil plays it in your channel. Open source, one Docker container." />
+    <meta property="og:title" content="Mendil: song requests for your TeamSpeak server" />
+    <meta property="og:description" content="Write a song in chat and Mendil plays it in your channel. Self-hosted, open source, TeamSpeak 3 and 6." />
+    <meta property="og:image" content="https://ulaski.github.io/mendil/og.png" />
+    <meta property="og:url" content="https://ulaski.github.io/mendil/" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#0b2e30" />
+    <link rel="icon" href={`${base}favicon.ico`} />
+    <link rel="apple-touch-icon" href={`${base}icon.png`} />
+  </head>
+  <body>
+    <a class="skip-link" href="#front">Skip to content</a>
+
+    <header class="rail">
+      <a class="rail__brand" href={base}>
+        <img src={logo.src} alt="" width="40" height="40" />
+        <span>Mendil</span>
+      </a>
+      <nav class="rail__nav" aria-label="Site">
+        <a href={docs('start/introduction')}>Docs</a>
+        <a href={docs('reference/commands')}>Commands</a>
+        <a href={repo}>GitHub</a>
+      </nav>
+    </header>
+
+    <main id="front">
+      <section class="front" aria-labelledby="headline">
+        <div class="strip strip--headline">
+          <span class="strip__code" aria-hidden="true">A1</span>
+          <div class="strip__body">
+            <h1 id="headline">Song requests for your TeamSpeak server</h1>
+            <p class="strip__typed">Write a song in chat. Mendil plays it in your channel.</p>
+          </div>
+        </div>
+
+        <div class="front__deck">
+          <div class="front__side front__side--left">
+            <a class="strip strip--action" href={docs('start/quick-start')}>
+              <span class="strip__code" aria-hidden="true">A2</span>
+              <span class="strip__body">
+                <span class="strip__label">Quick start</span>
+                <span class="strip__note">Set your server, then docker compose up</span>
+              </span>
+            </a>
+            <div class="strip strip--install">
+              <span class="strip__code" aria-hidden="true">A3</span>
+              <div class="strip__body">
+                <h2 class="strip__label">Install</h2>
+                <pre class="install" id="install"><code>{install.map((l) => <span title={l}>{l}</span>)}</code></pre>
+                <button class="copy" type="button" data-copy="install" aria-describedby="copy-status">Copy commands</button>
+                <span class="copy-status" id="copy-status" role="status"></span>
+              </div>
+            </div>
+          </div>
+
+          <figure class="window">
+            <a class="window__glass" href={demo.src} aria-label="Open the recording at full size">
+              <picture>
+                <source media="(max-width: 640px) and (prefers-reduced-motion: reduce)" srcset={`${base}media/demo-phone-still.png`} width="466" height="108" />
+                <source media="(max-width: 640px)" srcset={`${base}media/demo-phone.gif`} width="466" height="108" />
+                <source media="(prefers-reduced-motion: reduce)" srcset={`${base}media/demo-still.png`} />
+                <img
+                src={demo.src}
+                width="800"
+                height="506"
+                alt="The TeamSpeak 3 client: Deniz types !play fontaines d.c. mimesis in the channel chat, Mendil answers Now playing: Fontaines D.C. - Mimesis (Lyric Video) (3:52), requested by Deniz, and starts talking; then !np shows 0:11 / 3:52."
+                />
+              </picture>
+            </a>
+            <figcaption>Recorded in the TeamSpeak 3 client. The download wait is sped up.</figcaption>
+          </figure>
+
+          <ul class="front__side front__side--right" aria-label="At a glance">
+            <li class="strip strip--fact">
+              <span class="strip__code" aria-hidden="true">B1</span>
+              <span class="strip__body"><span class="strip__label">TS3 and TS6</span><span class="strip__note">Tested on both servers</span></span>
+            </li>
+            <li class="strip strip--fact">
+              <span class="strip__code" aria-hidden="true">B2</span>
+              <span class="strip__body"><span class="strip__label">Open source</span><span class="strip__note">GPL-3.0, on GitHub</span></span>
+            </li>
+            <li class="strip strip--fact">
+              <span class="strip__code" aria-hidden="true">B3</span>
+              <span class="strip__body"><span class="strip__label">One container</span><span class="strip__note">x86_64; ARM64 with the Native engine</span></span>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="rack" aria-labelledby="rack-title">
+        <div class="rack__head">
+          <h2 id="rack-title">Pick a selection</h2>
+          <p class="rack__note">Everything happens in the chat you already use.</p>
+        </div>
+
+        <div class="rack__body">
+          <ul class="rack__strips" role="list">
+            {selections.map((s, i) => (
+              <li>
+                <button
+                  class="strip strip--select"
+                  type="button"
+                  aria-pressed={i === 0 ? 'true' : 'false'}
+                  aria-controls="slip"
+                  data-code={s.code}
+                  data-lines={JSON.stringify(s.lines)}
+                >
+                  <span class="strip__code">{s.code}</span>
+                  <span class="strip__body">
+                    <span class="strip__label">{s.command}</span>
+                    <span class="strip__note">{s.label}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          <div class="slip" id="slip" aria-live="polite">
+            <div class="slip__top">
+              <p class="slip__head">Example chat</p>
+              <div class="display" aria-hidden="true"><span class="display__code" id="display-code">{first.code}</span></div>
+            </div>
+            <ol class="slip__lines" id="slip-lines">
+              {first.lines.map(([who, text]) => (
+                <li class={who === 'Mendil' ? 'is-bot' : ''}><b>{who}</b><span>{text}</span></li>
+              ))}
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <section class="engines" aria-labelledby="engines-title">
+        <h2 id="engines-title">Two ways into your server</h2>
+        <div class="engines__pair">
+          <div class="strip strip--engine">
+            <span class="strip__code" aria-hidden="true">D1</span>
+            <div class="strip__body">
+              <h3 class="strip__label">Classic</h3>
+              <p class="strip__note strip__note--lead">TeamSpeak’s own client, run without a screen.</p>
+              <p class="engine__facts">x86_64. About 300 MB of memory. Needs the Opus Music codec for good sound.</p>
+            </div>
+          </div>
+          <div class="strip strip--engine">
+            <span class="strip__code" aria-hidden="true">D2</span>
+            <div class="strip__body">
+              <h3 class="strip__label">Native <span class="tag">experimental</span></h3>
+              <p class="strip__note strip__note--lead">Speaks the TeamSpeak protocol itself.</p>
+              <p class="engine__facts">x86_64 and ARM64. About 80 MB. Plays in stereo in any channel.</p>
+            </div>
+          </div>
+        </div>
+        <p class="engines__more">One setting switches between them. <a href={docs('project/how-it-works')}>How it works</a></p>
+      </section>
+
+      <section class="name" aria-labelledby="name-title">
+        <h2 id="name-title"><span lang="tr">mendil</span> <span class="name__say">men-DEEL, a napkin</span></h2>
+        <p>
+          In Türkiye, people at a <i lang="tr">gazino</i> or <i lang="tr">meyhane</i> wrote their song request on a napkin and
+          passed it up to the band. Mendil does the same for your TeamSpeak server.
+        </p>
+      </section>
+
+      <section class="close" aria-labelledby="close-title">
+        <h2 id="close-title" class="visually-hidden">Get Mendil</h2>
+        <a class="strip strip--action strip--close" href={docs('start/quick-start')}>
+          <span class="strip__code" aria-hidden="true">A2</span>
+          <span class="strip__body">
+            <span class="strip__label">Start with the quick start</span>
+            <span class="strip__note">Docker, your server's address, and one command</span>
+          </span>
+        </a>
+        <nav class="close__links" aria-label="More">
+          <a href={docs('reference/commands')}>All commands</a>
+          <a href={docs('reference/configuration')}>Configuration</a>
+          <a href={docs('help/faq')}>FAQ</a>
+          <a href={docs('project/changelog')}>Changelog</a>
+          <a href={repo}>GitHub</a>
+        </nav>
+      </section>
+    </main>
+
+    <footer class="small-print">
+      <p>Mendil {pkg.version}. Free software under the GNU GPL v3 or later.</p>
+      <p>Not affiliated with or endorsed by TeamSpeak Systems GmbH. TeamSpeak is their trademark.</p>
+    </footer>
+
+    <script>
+      // Copy the install commands.
+      for (const button of document.querySelectorAll('[data-copy]')) {
+        button.addEventListener('click', async () => {
+          const lines = [...(document.getElementById(button.dataset.copy)?.querySelectorAll('span') ?? [])].map((l) => l.textContent);
+          const text = lines.join('\n');
+          const status = document.getElementById('copy-status');
+          try {
+            await navigator.clipboard.writeText(text);
+            status.textContent = 'Copied';
+          } catch {
+            status.textContent = 'Select the commands and copy them';
+          }
+          setTimeout(() => (status.textContent = ''), 2500);
+        });
+      }
+
+      // The selection rack: pressing a strip flips the display to its code and types the
+      // exchange onto the slip. Reduced motion shows it at once.
+      const still = window.matchMedia('(prefers-reduced-motion: reduce)');
+      const display = document.getElementById('display-code');
+      const list = document.getElementById('slip-lines');
+      let typing = 0;
+
+      function line(who, text) {
+        const li = document.createElement('li');
+        if (who === 'Mendil') li.className = 'is-bot';
+        const name = document.createElement('b');
+        name.textContent = who;
+        const body = document.createElement('span');
+        li.append(name, body);
+        list.append(li);
+        return body;
+      }
+
+      async function show(lines) {
+        const run = ++typing;
+        list.replaceChildren();
+        for (const [who, text] of lines) {
+          const body = line(who, text);
+          if (still.matches) {
+            body.textContent = text;
+            continue;
+          }
+          const step = who === 'Mendil' ? 2 : 1;
+          for (let i = 0; i <= text.length; i += step) {
+            if (run !== typing) return;
+            body.textContent = text.slice(0, i);
+            await new Promise((r) => setTimeout(r, who === 'Mendil' ? 8 : 28));
+          }
+          body.textContent = text;
+          await new Promise((r) => setTimeout(r, 220));
+        }
+      }
+
+      for (const button of document.querySelectorAll('.strip--select')) {
+        button.addEventListener('click', () => {
+          for (const other of document.querySelectorAll('.strip--select')) other.setAttribute('aria-pressed', String(other === button));
+          display.textContent = button.dataset.code;
+          if (!still.matches) {
+            display.classList.remove('is-flipping');
+            void display.offsetWidth;
+            display.classList.add('is-flipping');
+          }
+          show(JSON.parse(button.dataset.lines));
+        });
+      }
+    </script>
+
+    <style is:global>
+      :root {
+        --cabinet: #0b2e30;
+        --cabinet-deep: #082325;
+        --cabinet-ink: #f4f1ea;
+        --cabinet-ink-2: #b4c9c8;
+        --teal: #0e6e73;
+        --coral: #f2655a;
+        --strip: #fbf1de;
+        --ink: #1b1d1f;
+        --ink-2: #4a4f52;
+        --display: 'Archivo Variable', 'Archivo', system-ui, sans-serif;
+        --typed: 'Courier Prime', 'Courier New', monospace;
+        --gutter: clamp(16px, 4vw, 48px);
+        --radius: 3px;
+        color-scheme: dark;
+      }
+      * { box-sizing: border-box; }
+      html { background: var(--cabinet); scrollbar-color: #2c5557 var(--cabinet-deep); }
+      body {
+        margin: 0;
+        background: var(--cabinet);
+        color: var(--cabinet-ink);
+        font-family: var(--display);
+        font-size: 1.0625rem;
+        line-height: 1.55;
+        -webkit-font-smoothing: antialiased;
+      }
+      ::selection { background: var(--coral); color: var(--ink); }
+      :focus-visible { outline: 3px solid var(--coral); outline-offset: 3px; }
+      a { color: inherit; text-underline-offset: 0.22em; text-decoration-thickness: 1px; }
+      a:hover { text-decoration-thickness: 2px; }
+      h1, h2, h3, p { margin: 0; }
+      .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+      .skip-link { position: absolute; left: 12px; top: -60px; z-index: 5; padding: 10px 14px; background: var(--strip); color: var(--ink); border-radius: var(--radius); }
+      .skip-link:focus { top: 12px; }
+
+      /* Cabinet top rail */
+      .rail {
+        display: flex; align-items: center; justify-content: space-between; gap: 16px;
+        padding: 12px var(--gutter);
+        border-bottom: 3px solid var(--coral);
+        background: var(--cabinet-deep);
+      }
+      .rail__brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 800; font-stretch: 85%; font-size: 1.35rem; letter-spacing: -0.01em; }
+      .rail__nav { display: flex; gap: clamp(14px, 3vw, 32px); font-weight: 650; font-stretch: 90%; }
+      .rail__nav a { text-decoration: none; padding: 6px 0; border-bottom: 2px solid transparent; }
+      .rail__nav a:hover { border-bottom-color: var(--coral); }
+
+      /* The title strip: cream card stock, coral band over teal band, a selection code. */
+      .strip {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        background: var(--strip);
+        color: var(--ink);
+        border-top: 0.42rem solid var(--coral);
+        border-bottom: 0.42rem solid var(--teal);
+        border-radius: var(--radius);
+        box-shadow: 0 1px 1px rgb(0 0 0 / 0.25), 0 12px 24px -16px rgb(0 0 0 / 0.7);
+        text-decoration: none;
+      }
+      .strip__code {
+        display: grid; place-items: center;
+        min-width: 3.4rem; padding: 0 0.7rem;
+        border-right: 1px solid rgb(27 29 31 / 0.2);
+        font-stretch: 68%; font-weight: 820; font-size: 1.15rem; letter-spacing: 0.04em;
+        font-variant-numeric: tabular-nums;
+      }
+      .strip__body { display: flex; flex-direction: column; gap: 0.15rem; padding: 0.7rem 1rem 0.75rem; min-width: 0; }
+      /* Typed on the strip: titles and commands. Printed: the notes beneath them. */
+      .strip__label { font-family: var(--typed); font-weight: 700; font-size: 1.12rem; line-height: 1.25; text-wrap: balance; overflow-wrap: anywhere; }
+      .strip__typed { font-family: var(--typed); font-size: 0.98rem; color: var(--ink-2); line-height: 1.35; overflow-wrap: anywhere; }
+      .strip__note { font-weight: 560; font-stretch: 92%; font-size: 0.95rem; color: var(--ink-2); line-height: 1.35; }
+      .strip__note--lead { font-weight: 650; font-size: 1.05rem; color: var(--ink); }
+
+      /* First viewport: the jukebox front */
+      .front { max-width: 1320px; margin: 0 auto; padding: clamp(20px, 3.4vw, 40px) var(--gutter) clamp(36px, 5vw, 64px); }
+      .strip--headline { border-top-width: 0.7rem; border-bottom-width: 0.7rem; }
+      .strip--headline .strip__code { min-width: 5.2rem; font-size: clamp(1.4rem, 2.4vw, 2rem); }
+      .strip--headline .strip__body { padding: clamp(14px, 2vw, 22px) clamp(16px, 2.4vw, 30px); gap: 0.5rem; }
+      .strip--headline h1 {
+        font-weight: 850; font-stretch: 74%;
+        font-size: clamp(2.5rem, 6.4vw, 5.6rem);
+        line-height: 0.98; letter-spacing: -0.015em; word-spacing: 0.1em;
+        text-wrap: balance;
+      }
+      .strip--headline .strip__typed { font-size: clamp(1.05rem, 1.6vw, 1.35rem); color: var(--ink); }
+
+      .front__deck {
+        display: grid;
+        grid-template-columns: minmax(250px, 0.9fr) minmax(0, 2.1fr) minmax(235px, 0.8fr);
+        gap: clamp(14px, 1.8vw, 24px);
+        margin-top: clamp(14px, 1.8vw, 24px);
+        align-items: start;
+      }
+      .front__side { display: grid; gap: clamp(12px, 1.4vw, 18px); margin: 0; padding: 0; list-style: none; }
+
+      .strip--install .strip__body { gap: 0.5rem; }
+      .install {
+        margin: 0; padding: 0.55rem 0.7rem 0.45rem;
+        background: #f2e5c9; border-radius: 2px;
+        font-family: var(--typed); font-size: 0.82rem; line-height: 1.6; color: var(--ink);
+        overflow-x: auto; scrollbar-width: thin; scrollbar-color: #8a7a5a #eadbbb;
+        /* The lines run past the edge: fade it, and keep a scrollbar visible, so it reads as scrollable. */
+        -webkit-mask-image: linear-gradient(to right, #000 82%, transparent);
+        mask-image: linear-gradient(to right, #000 82%, transparent);
+      }
+      .install:hover, .install:focus-within { -webkit-mask-image: none; mask-image: none; }
+      .install::-webkit-scrollbar { height: 6px; }
+      .install::-webkit-scrollbar-track { background: #eadbbb; border-radius: 3px; }
+      .install::-webkit-scrollbar-thumb { background: #8a7a5a; border-radius: 3px; }
+      /* One command per line, scrolled sideways rather than cut, so what you copy is what you read. */
+      .install span { display: block; white-space: pre; }
+      .copy {
+        justify-self: start; align-self: flex-start;
+        min-height: 40px; padding: 0 14px;
+        border: 1.5px solid var(--ink); border-radius: 999px; background: transparent; color: var(--ink);
+        font: 700 0.92rem/1 var(--display); font-stretch: 90%; cursor: pointer;
+      }
+      .copy:hover { background: var(--ink); color: var(--strip); }
+      .copy-status { min-height: 1.2em; font-size: 0.85rem; color: var(--teal); font-weight: 700; }
+      .copy-status:empty { display: none; }
+
+      .strip--action { background: var(--coral); border-top-color: var(--strip); transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.18s; }
+      .strip--action .strip__code { border-right-color: rgb(27 29 31 / 0.3); }
+      .strip--action .strip__label { font-size: 1.4rem; }
+      .strip--action .strip__note { color: var(--ink); }
+      .strip--action:hover { transform: translateY(-2px); box-shadow: 0 2px 2px rgb(0 0 0 / 0.25), 0 18px 28px -16px rgb(0 0 0 / 0.75); }
+      .strip--action:active { transform: translateY(1px); }
+
+      .window { margin: 0; }
+      .window__glass {
+        display: block;
+        padding: clamp(8px, 1vw, 12px);
+        background: var(--cabinet-deep);
+        border: 1px solid #1f4c4f;
+        border-radius: 10px;
+        box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.4), 0 18px 40px -24px rgb(0 0 0 / 0.8);
+      }
+      .window img { display: block; width: 100%; height: auto; border-radius: 4px; }
+      .window figcaption { margin-top: 0.6rem; font-size: 0.85rem; color: var(--cabinet-ink-2); text-align: center; }
+
+      /* Selection rack */
+      .rack { background: var(--cabinet-deep); border-top: 1px solid #1f4c4f; border-bottom: 1px solid #1f4c4f; }
+      .rack__head, .rack__body { max-width: 1320px; margin: 0 auto; padding-inline: var(--gutter); }
+      .rack__head {
+        display: grid; gap: 8px;
+        padding-top: clamp(40px, 6vw, 72px); padding-bottom: clamp(18px, 2.5vw, 28px);
+      }
+      .rack__head h2, .engines h2 { font-weight: 850; font-stretch: 76%; font-size: clamp(2rem, 4.2vw, 3.3rem); line-height: 1; letter-spacing: -0.01em; word-spacing: 0.1em; }
+      .rack__note { color: var(--cabinet-ink-2); }
+      .display {
+        display: grid; place-items: center;
+        min-width: 5.6rem; height: 3.7rem; padding: 0 0.8rem;
+        background: #050f10; border: 2px solid #1f4c4f; border-radius: 8px;
+        box-shadow: inset 0 2px 10px rgb(0 0 0 / 0.8);
+        overflow: hidden;
+      }
+      .display__code { font-weight: 850; font-stretch: 62%; font-size: 2.6rem; line-height: 1; letter-spacing: 0.06em; color: var(--coral); font-variant-numeric: tabular-nums; }
+      .display__code.is-flipping { animation: flip 0.32s cubic-bezier(0.2, 0.8, 0.2, 1); }
+      @keyframes flip {
+        from { transform: translateY(-70%); opacity: 0; filter: blur(2px); }
+        to { transform: none; opacity: 1; filter: none; }
+      }
+
+      .rack__body {
+        display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr); gap: clamp(18px, 2.4vw, 32px);
+        padding-bottom: clamp(44px, 6vw, 80px); align-items: start;
+      }
+      .rack__strips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 0; padding: 0; list-style: none; }
+      .strip--select {
+        width: 100%; height: 100%; text-align: left; cursor: pointer; font: inherit;
+        border-left: 0; border-right: 0;
+        transition: transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.16s, background-color 0.16s;
+      }
+      .strip--select:hover { transform: translateY(-2px); }
+      .strip--select .strip__label { font-size: 0.97rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .strip--fact .strip__label { font-size: 1.05rem; }
+      .strip--select[aria-pressed='true'] { background: #fff8ea; box-shadow: 0 0 0 3px var(--coral), 0 12px 24px -16px rgb(0 0 0 / 0.7); transform: translateY(1px); }
+      .strip--select[aria-pressed='true'] .strip__code { background: var(--ink); color: var(--strip); }
+
+      .slip {
+        position: sticky; top: 20px;
+        background: var(--strip); color: var(--ink);
+        border-radius: var(--radius);
+        padding: 1rem 1.15rem 1.2rem;
+        box-shadow: 0 1px 1px rgb(0 0 0 / 0.25), 0 18px 32px -18px rgb(0 0 0 / 0.75);
+        min-height: 14rem;
+      }
+      .slip__top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 0.75rem; border-bottom: 1px dashed rgb(27 29 31 / 0.35); }
+      .slip__head { font-weight: 800; font-stretch: 80%; font-size: 0.95rem; color: var(--ink-2); }
+      .slip__lines { margin: 0.7rem 0 0; padding: 0; list-style: none; display: grid; gap: 0.7rem; font-family: var(--typed); font-size: 0.98rem; line-height: 1.45; }
+      .slip__lines li { display: grid; grid-template-columns: 4.6rem minmax(0, 1fr); gap: 0.6rem; }
+      .slip__lines b { font-family: var(--display); font-weight: 800; font-stretch: 85%; }
+      .slip__lines li.is-bot b { color: var(--teal); }
+      .slip__lines span { white-space: pre-line; overflow-wrap: anywhere; }
+
+      /* Engines */
+      .engines { max-width: 1320px; margin: 0 auto; padding: clamp(44px, 6vw, 80px) var(--gutter) clamp(20px, 3vw, 36px); }
+      .engines__pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(14px, 1.8vw, 24px); margin-top: clamp(18px, 2.5vw, 28px); }
+      .strip--engine .strip__label { font-size: 1.6rem; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+      .engine__facts { margin-top: 0.35rem; color: var(--ink-2); }
+      .tag { font-family: var(--display); font-size: 0.78rem; font-weight: 750; font-stretch: 90%; padding: 2px 8px; border-radius: 999px; border: 1.5px solid var(--ink-2); color: var(--ink-2); }
+      .engines__more { margin-top: 1rem; color: var(--cabinet-ink-2); }
+      .engines__more a { color: var(--cabinet-ink); font-weight: 700; }
+
+      /* The name */
+      .name { max-width: 1320px; margin: 0 auto; padding: clamp(36px, 5vw, 64px) var(--gutter); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: clamp(16px, 3vw, 48px); align-items: end; }
+      .name h2 { display: flex; flex-direction: column; gap: 0.3rem; font-family: var(--typed); font-weight: 700; font-size: clamp(3rem, 8vw, 6rem); line-height: 0.9; color: var(--strip); }
+      .name__say { font-family: var(--display); font-weight: 650; font-stretch: 90%; font-size: 1.05rem; color: var(--cabinet-ink-2); letter-spacing: 0; }
+      .name p { max-width: 46ch; font-size: 1.15rem; color: var(--cabinet-ink); }
+
+      /* Close */
+      .close { max-width: 1320px; margin: 0 auto; padding: clamp(24px, 4vw, 48px) var(--gutter) clamp(44px, 6vw, 72px); display: grid; gap: 22px; }
+      .strip--close .strip__label { font-size: clamp(1.5rem, 3vw, 2.2rem); }
+      .close__links { display: flex; flex-wrap: wrap; gap: 10px 28px; font-weight: 650; font-stretch: 90%; }
+
+      .small-print { border-top: 1px solid #1f4c4f; padding: 22px var(--gutter) 30px; color: var(--cabinet-ink-2); font-size: 0.9rem; display: grid; gap: 4px; max-width: 1320px; margin: 0 auto; }
+
+      @media (max-width: 1100px) {
+        .front__deck { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+        .window { grid-column: 1 / -1; grid-row: 1; }
+      }
+      @media (max-width: 1100px) {
+        .rack__body { grid-template-columns: 1fr; }
+        /* The slip and its display ride above the strips and stay in view while you press them. */
+        .slip { order: -1; top: 8px; z-index: 2; min-height: 0; max-height: 46vh; overflow-y: auto; box-shadow: 0 0 0 8px var(--cabinet-deep), 0 18px 32px -18px rgb(0 0 0 / 0.75); }
+      }
+      @media (max-width: 860px) {
+        .name { grid-template-columns: 1fr; }
+      }
+      @media (max-width: 640px) {
+        .front__deck { grid-template-columns: 1fr; }
+        .rack__strips, .engines__pair { grid-template-columns: 1fr; }
+        .strip--headline .strip__code { min-width: 3.4rem; }
+        .display { min-width: 4.6rem; height: 3rem; }
+        .display__code { font-size: 2.1rem; }
+        .rail__brand span { font-size: 1.2rem; }
+        .slip__lines li { grid-template-columns: 1fr; gap: 0.1rem; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { transition: none !important; animation: none !important; }
+      }
+    </style>
+  </body>
+</html>

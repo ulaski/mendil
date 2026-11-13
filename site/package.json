@@ -1,0 +1,23 @@
+{
+  "name": "mendil-site",
+  "type": "module",
+  "version": "0.0.0",
+  "scripts": {
+    "sync": "node scripts/sync-repo-docs.mjs",
+    "predev": "node scripts/sync-repo-docs.mjs",
+    "dev": "astro dev",
+    "prebuild": "node scripts/sync-repo-docs.mjs",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/markdown-remark": "7.3.8",
+    "@astrojs/starlight": "0.42.11",
+    "@fontsource-variable/archivo": "5.3.0",
+    "@fontsource/courier-prime": "5.3.0",
+    "astro": "7.4.11",
+    "sharp": "0.35.3"
+  },
+  "private": true
+}

@@ -11,6 +11,7 @@ Write a song in chat and Mendil plays it in your channel.
 [![CI](https://github.com/ulaski/mendil/actions/workflows/ci.yml/badge.svg)](https://github.com/ulaski/mendil/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
 [![TeamSpeak 3 & 6](https://img.shields.io/badge/TeamSpeak-3%20%26%206-2580c3.svg)](#requirements)
+[![Docs](https://img.shields.io/badge/docs-ulaski.github.io%2Fmendil-0e6e73.svg)](https://ulaski.github.io/mendil/)
 
 </div>
 
@@ -38,44 +39,6 @@ In Türkiye, people at a *gazino* or *meyhane* used to write their song request 
 - 🔐 Knows admins from listeners: listeners request songs and can skip or remove their own, admins control the rest. Set by TeamSpeak unique ID or server group.
 - 🖥️ Has a web panel: see what's playing, manage the queue and add songs from your browser or phone. Friends sign in with their TeamSpeak name.
 - 🧪 Comes with two voice engines: the official TeamSpeak client, or an experimental native engine that also runs on ARM and plays music in any channel
-
-## How it works
-
-ServerQuery can't send audio, so a bot has to connect to TeamSpeak as a real client. Mendil can do that in two ways:
-
-| | Classic (default) | Native (experimental) |
-|---|---|---|
-| How | Runs the official TeamSpeak 3 client without a screen and controls it | Speaks the TeamSpeak protocol itself, through the open-source [teamspeak-js](https://github.com/HoneyBBQ/teamspeak-js) library |
-| Image | `ghcr.io/ulaski/mendil:latest` | `ghcr.io/ulaski/mendil:native` |
-| CPU | x86_64 only (ARM via slow emulation) | x86_64 and ARM64 (e.g. Raspberry Pi) |
-| Memory | about 300 MB | about 80 MB |
-| Download size | about 310 MB, plus the TeamSpeak client (~110 MB) on first start | about 185 MB |
-| Channel codec | needs Opus Music for good sound | plays in stereo in any channel |
-| Why a connection was refused | not reported by the client | logged (wrong password, ban, security level…) |
-| TeamSpeak 6 servers | works (TS3 client on a TS6 server) | works |
-
-Classic is the safe choice: it is TeamSpeak's own client. Native is newer and lighter. It is not made or endorsed by TeamSpeak, and the library behind it is young, so treat it as experimental. You switch with one setting, `VOICE_BACKEND`, and can switch back any time.
-
-### Classic
-
-Mendil runs the official TeamSpeak 3 Linux client without a screen and controls it remotely:
-
-```
-TeamSpeak chat ──► TS3 client ◄── ClientQuery (127.0.0.1:25639) ──► Node.js controller
-                       ▲                                                 │
-                       │ microphone = PulseAudio monitor                 │ yt-dlp | ffmpeg
-                       └────────────── virtual sound card ◄──────────────┘
-```
-
-- Xvfb provides a virtual screen and PulseAudio a virtual sound card.
-- yt-dlp downloads the audio, fetching the next track while the current one plays. ffmpeg plays it into the virtual card at a loudness measured once per track, and the TeamSpeak client uses that card as its microphone. Live streams and very long tracks are streamed instead of downloaded.
-- The queue, the current position, the loop mode and the volume are saved, so a restart or an update continues where it stopped.
-- The controller reads chat through the client's ClientQuery plugin, answers there, and only transmits while music is playing.
-- Mendil fills in the license dialog, the intro wizard and the audio settings before the client first starts, so nobody has to click through the client's windows.
-
-### Native
-
-Mendil connects to the server itself. ffmpeg encodes the music as Opus (the codec TeamSpeak uses), and Mendil sends it as voice packets, 50 per second. There is no TeamSpeak client, X server or sound card involved, which is why it is lighter and runs on any CPU. It keeps its own identity in the data volume, separate from Classic's, so a server group you gave the Classic bot has to be given again after switching.
 
 ## Requirements
 
@@ -170,250 +133,27 @@ From source, add a `build` section to the same service, so Compose builds the na
 and start it with `docker compose up -d --build`.
 </details>
 
-### Web panel
+## Documentation
 
-Mendil also has a web panel on port 8080: what's playing, the queue, volume and loop, a box to request songs and search YouTube, and the live log. It works on phones too.
+Everything else is on **[ulaski.github.io/mendil](https://ulaski.github.io/mendil/)**:
 
-There are two ways to sign in:
+- [Where is your server?](https://ulaski.github.io/mendil/guides/your-server/): TeamSpeak on another machine, in Docker on the same host, or not installed yet
+- [Server settings](https://ulaski.github.io/mendil/guides/server-settings/): the channel codec, talk power and anti-flood
+- [Roles](https://ulaski.github.io/mendil/guides/roles/), [web panel](https://ulaski.github.io/mendil/guides/web-panel/), [radio](https://ulaski.github.io/mendil/guides/radio/)
+- [Commands](https://ulaski.github.io/mendil/reference/commands/) and [configuration](https://ulaski.github.io/mendil/reference/configuration/)
+- [YouTube blocks](https://ulaski.github.io/mendil/guides/youtube/), [troubleshooting](https://ulaski.github.io/mendil/help/troubleshooting/) and the [FAQ](https://ulaski.github.io/mendil/help/faq/)
+- [How it works](https://ulaski.github.io/mendil/project/how-it-works/): the two voice engines, Classic and Native
 
-- **With TeamSpeak.** Type your TeamSpeak nickname while you're on the server, and Mendil sends you a one-time code in a private message. The panel then knows who you are and gives you the same [role](#roles) as in chat: listeners see the queue and request songs, admins get every control. Songs you request show your name.
-- **With the panel password.** Always an admin. Use it when Mendil isn't connected to TeamSpeak.
-
-To open it, publish the port in `docker-compose.yml`:
-
-```yaml
-    ports:
-      - "127.0.0.1:8080:8080"
-```
-
-Then open http://localhost:8080 on the machine that runs Mendil. The panel password is in the log on first start (`docker compose logs mendil | grep password`), or choose one with `PANEL_PASSWORD`.
-
-On a server, keep the `127.0.0.1:` part and reach the panel through an SSH tunnel (`ssh -L 8080:localhost:8080 you@server`, then open http://localhost:8080), or put it behind a reverse proxy with HTTPS. Don't publish it to the internet over plain HTTP: the password would travel unencrypted. `PANEL_PORT=0` turns the panel off.
-
-### Where is your TeamSpeak server?
-
-| Setup | What to do |
-|---|---|
-| Another machine, or hosted by a provider | Set `TS3_HOST` to its address. Done. |
-| Same host, **in Docker** | Copy [`examples/existing-docker-server/docker-compose.override.yml`](examples/existing-docker-server/docker-compose.override.yml) next to `docker-compose.yml`, adjust the network name, and set `TS3_HOST` to the server's service name (e.g. `teamspeak`). |
-| Same host, **not in Docker** | Set `TS3_HOST=host.docker.internal` and add `extra_hosts: ["host.docker.internal:host-gateway"]` to the service. |
-| No server yet | [`examples/with-ts3-server`](examples/with-ts3-server/docker-compose.yml) starts a TeamSpeak server and Mendil together. |
-
-### Recommended server settings
-
-- Set Mendil's channel to the **Opus Music** codec with quality 10 (*Edit Channel → Audio*). The default *Opus Voice* codec makes music sound bad.
-- If the channel requires talk power, give Mendil's server group enough of it.
-- Long queue listings send a few messages in a row. If the server's anti-flood blocks Mendil, add it to a group with `b_client_ignore_antiflood`.
-- Mendil keeps its identity across restarts in the `ts3client-data` volume, so a server group you give it stays.
-
-Mendil checks the codec and talk power when it joins a channel and posts a short hint if something is off, once per channel. `CHANNEL_HINTS=false` turns this off.
-
-## Commands
-
-Mendil reads its own channel's chat and private messages sent to it. In private chat the `!` prefix is optional. Commands marked 🔒 are for admins once you've set up [roles](#roles).
-
-| Command | Aliases | Description |
-|---|---|---|
-| `!play <link \| search>` | `!p` | Play now, or add to the end of the queue. Accepts a YouTube link, a playlist, a Spotify song, album or playlist link, or search terms. |
-| `!playnext <link \| search>` 🔒 | `!pn` | Add to the front of the queue |
-| `!search <search>` | `!find` | Show the top 5 YouTube results |
-| `!pick <number>` | | Queue a result from `!search` |
-| `!skip` | `!s`, `!next` | Skip the current track. Listeners can skip only their own songs. |
-| `!pause` / `!resume` 🔒 | `!unpause` | Pause / resume |
-| `!stop` 🔒 | | Stop and clear the queue |
-| `!np` | `!now`, `!nowplaying` | Show the current track and its progress |
-| `!queue` | `!q`, `!list` | Show the queue |
-| `!remove <number>` | `!rm` | Remove a track from the queue. Listeners can remove only their own songs. |
-| `!seek <1:30 \| +30 \| -10>` | | Jump to a time in the current track. Listeners can seek only their own songs. In the web panel, click the progress bar. |
-| `!move <from> <to>` 🔒 | `!mv` | Move a queued track to another position |
-| `!clear` 🔒 | | Clear the queue (the current track keeps playing) |
-| `!shuffle` 🔒 | | Shuffle the queue |
-| `!loop [off\|one\|all]` 🔒 | `!repeat` | Loop nothing, the current track, or the whole queue |
-| `!vol [0-100]` | `!volume`, `!v` | Show the volume; setting it is for admins 🔒 |
-| `!radio [name \| link \| off]` | | Show the radio and its stations. Picking a station or turning it off is for admins 🔒. See [Radio](#radio). |
-| `!join` 🔒 | `!come` | Move the bot to your channel. From another channel, send it as a private message. |
-| `!whoami` | `!me`, `!id` | Show your unique ID, server groups and role |
-| `!help` | `!h`, `!commands` | List commands |
-
-With `BOT_LANGUAGE=tr`, Turkish aliases also work, e.g. `!çal`, `!geç`, `!ses`, `!gel`.
-
-### Roles
-
-Out of the box everyone can do everything. To keep the controls for a few people, name them as admins:
-
-```env
-# e.g. your server's "Server Admin" group, and/or single people (!whoami shows your ID and groups)
-ADMIN_GROUPS=6
-ADMIN_UIDS=abc123=
-```
-
-Everyone else becomes a listener. Listeners can request and search songs, see what's playing and the queue, and skip or remove the songs they requested themselves. Pausing, stopping, the volume, loop, shuffle, clearing, play-next, the radio station, `!join` and other people's songs are for admins. The web panel follows the same rules.
-
-To keep some people out entirely, add `ALLOWED_UIDS` / `ALLOWED_GROUPS`: then only those people (and the admins) can use the bot at all.
-
-### Radio
-
-Mendil can play an internet radio station whenever the queue is empty. When someone requests a song, the radio stops at once and the song plays; when the queue runs out, the radio comes back. The station's current song shows in `!np` and in the web panel.
-
-List your stations, and optionally pick one to start with:
-
-```env
-RADIO_STATIONS=Groove Salad=https://somafm.com/groovesalad.pls,Radio Paradise=https://stream.radioparadise.com/mp3-128
-RADIO=Radio Paradise
-```
-
-Then `!radio` shows the stations, `!radio <name>` switches (admins), and `!radio off` turns it off. Admins can also use a stream address directly, as in `!radio https://…`, and pick a station in the web panel. Mendil remembers the choice across restarts until you change `RADIO`. `!stop` turns the radio off too.
-
-Most Icecast and SHOUTcast streams work (MP3, AAC, Ogg), as do HLS streams and `.pls` / `.m3u` playlist links. A station that keeps failing is stopped after three tries, like a song. Some stations refuse anything that isn't their own player; then Mendil says what the station answered.
-
-### When nobody is listening
-
-When Mendil is the only one in its channel for 30 seconds, it pauses and stops transmitting. When someone joins, it continues, and the radio reconnects to the live stream. If you resume it by hand while the channel is empty (from the web panel, say), it keeps playing. `PAUSE_WHEN_ALONE=false` turns this off.
-
-## Configuration
-
-All settings are environment variables, usually set in `.env`.
-
-| Variable | Default | Description |
-|---|---|---|
-| `TS3CLIENT_LICENSE` | *(required)* | Set to `accept` to accept the [TeamSpeak client license](https://www.teamspeak.com/en/privacy-and-terms/). The client is downloaded on first start. |
-| `TS3_HOST` | *(required)* | Server address: host name, IP or `host:port` |
-| `TS3_PORT` | `9987` | Voice port |
-| `TS3_SERVER_PASSWORD` | | Server password |
-| `TS3_CHANNEL` | | Channel to join, by name or path (`Games/Music`). Empty means the default channel. |
-| `TS3_CHANNEL_PASSWORD` | | Channel password |
-| `BOT_NICKNAME` | `Mendil` | Nickname |
-| `BOT_LANGUAGE` | `en` | Chat language: `en`, `tr` |
-| `COMMAND_PREFIX` | `!` | Command prefix |
-| `ADMIN_UIDS` | | Comma-separated TeamSpeak unique IDs of [admins](#roles). `!whoami` shows yours. |
-| `ADMIN_GROUPS` | | Comma-separated server group IDs of admins. If both admin lists are empty, everyone who may use the bot is an admin. |
-| `ALLOWED_UIDS` | | Comma-separated unique IDs allowed to use the bot at all. |
-| `ALLOWED_GROUPS` | | Comma-separated server group IDs allowed to use the bot at all. If both lists are empty, everyone can; `!help` and `!whoami` always work, and admins are always allowed. |
-| `CHANNEL_HINTS` | `true` | Post a hint when the channel's codec or talk power is wrong for music |
-| `ANNOUNCE_TRACKS` | `true` | Post "Now playing" messages |
-| `PAUSE_WHEN_ALONE` | `true` | Pause while nobody else is in the bot's channel ([details](#when-nobody-is-listening)) |
-| `RADIO_STATIONS` | | Radio stations, as `name=stream address` separated by commas ([Radio](#radio)) |
-| `RADIO` | | Station name or stream address that plays whenever the queue is empty, from the first start |
-| `DEFAULT_VOLUME` | `70` | Start-up volume, 0 to 100 |
-| `NORMALIZE_AUDIO` | `true` | Loudness-normalise tracks to -16 LUFS |
-| `MAX_QUEUE` | `100` | Max queue length |
-| `MAX_PLAYLIST_ITEMS` | `50` | Max tracks taken from one playlist |
-| `MAX_QUEUE_PER_USER` | `0` | Songs one person may have waiting in the queue; `0` means no limit. Named [admins](#roles) are exempt. A playlist adds only as many songs as fit. |
-| `MAX_TRACK_DURATION` | `0` | Max track length in seconds, live streams included. `0` means unlimited. |
-| `PREFETCH` | `true` | Download tracks before playing them, so there are no gaps and network hiccups don't matter. `false` streams everything. |
-| `PREFETCH_MAX_DURATION` | `1800` | Longer tracks (in seconds) and live streams are streamed instead of downloaded |
-| `YTDLP_AUTO_UPDATE` | `true` | Keep yt-dlp up to date in the background (daily, and when YouTube extraction breaks). A new version that fails a self-test is rolled back. |
-| `YTDLP_COOKIES_FILE` | | Cookies file for YouTube, see [docs/youtube.md](docs/youtube.md) |
-| `YTDLP_PROXY` | | Proxy for YouTube traffic only, e.g. `socks5://user:pass@host:1080` |
-| `ALLOW_PRIVATE_URLS` | `false` | Let `!play` open addresses on private networks (LAN, localhost), e.g. a media server at home. Off by default, see [SECURITY.md](SECURITY.md). |
-| `VOICE_BACKEND` | per image | `classic` (official TeamSpeak client) or `native`, see [How it works](#how-it-works). Each image sets its own; only set this to run the native engine inside the classic image. |
-| `NATIVE_BITRATE` | `128` | Native engine only: Opus bitrate in kbit/s, 48 to 192 |
-| `PANEL_PORT` | `8080` | Port of the web panel inside the container. `0` turns it off. |
-| `PANEL_TRUST_PROXY` | `false` | Set to `true` when the panel is behind a reverse proxy, so the login limit applies per client instead of to the proxy |
-| `PANEL_PASSWORD` | | Admin password for the web panel. If empty, one is generated on first start and printed in the log. Everyone else signs in with their TeamSpeak nickname. |
-| `TS3_CLIENT_VERSION` | `3.6.2` | TeamSpeak client version to download |
-| `TS3_CLIENT_SHA256` | | Expected SHA-256 of that download. Known for 3.6.2; set it if you change the version. |
-| `LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
-
-## Updating
-
-```bash
-docker compose pull && docker compose up -d
-# from source: git pull && docker compose up -d --build
-```
-
-`latest` always points to the newest release. To stay on a version you've tested, use its tag instead, e.g. `image: ghcr.io/ulaski/mendil:0.6.1`.
-
-yt-dlp also updates itself in the background, daily and whenever YouTube extraction starts failing, so most YouTube changes need no action.
-
-The queue survives updates and restarts. It is stored with the bot's identity in the `ts3client-data` volume.
-
-## Troubleshooting
-
-**Mendil doesn't connect / "the server refused the connection"**
-The TeamSpeak 3 client reports every refusal the same way, without a reason. The usual causes, most likely first:
-1. a wrong or missing `TS3_SERVER_PASSWORD`;
-2. a ban on the bot's identity, IP or nickname;
-3. the server is full;
-4. the server requires an identity security level above 8.
-
-If Mendil gets kicked or banned while connected, the log says so, with who did it. Run with `LOG_LEVEL=debug` for more detail. The TeamSpeak client's own log is here:
-`docker compose exec mendil sh -c 'tail -50 $(ls -t ~/.ts3client/logs/*.log | head -1)'`
-
-**Mendil joins but nobody hears anything**
-Check for a hint from Mendil in the channel chat (talk power, codec), and that it isn't muted by the server. `!np` shows whether something is actually playing.
-
-**"Sign in to confirm you're not a bot"**
-YouTube sometimes blocks data-center IPs. Cookies from a throwaway YouTube account or a proxy (`YTDLP_PROXY`) fix it, and [docs/youtube.md](docs/youtube.md) explains both step by step. Mendil links to that page in chat when it detects the block.
-
-**Music sounds bad**
-The channel codec is almost always the cause. Use Opus Music at quality 10.
-
-**Container is "unhealthy"**
-The health check passes while Mendil is connected to the server. `docker compose exec mendil cat /tmp/mendil-health.json` shows the details, and the logs say why it isn't connected. Mendil retries on its own: within seconds after a disconnect, 45 s after a kick, and after a ban has expired. If it can't connect for 20 minutes, it restarts itself.
-
-**Playback stopped with "tracks keep failing"**
-After 3 failed tracks in a row, or right away when YouTube blocks the bot, Mendil stops instead of skipping through the whole queue. Fix the cause (see the YouTube note above), then type `!resume`.
-
-**Resource usage**
-Every 10 minutes the log has a `stats:` line with CPU and memory per process and the gap/load times of recent tracks.
-
-## FAQ
-
-**Classic or Native?**
-Classic runs TeamSpeak's own client, which has spoken exactly what servers expect for years. Native is lighter, runs on ARM and doesn't care about the channel codec, but it uses an independent implementation of the TeamSpeak protocol that is younger and not endorsed by TeamSpeak. If Classic works for you, keep it. If you're on a Raspberry Pi, short on memory, or can't change the channel codec, try Native.
-
-**Can I run several bots?**
-Yes. Run one container per bot, each with its own volumes and nickname. Use a separate compose project (`docker compose -p mendil2 …`) or directory for each.
-
-**Does it work with TeamSpeak 6 servers?**
-Yes, with both engines. Tested with TS6 server 6.0.0-beta13.1: commands, announcements and audio all work, and CI tests the native engine against TS3 and TS6 servers on every change.
-
-**TeamSpeak 3 reaches end-of-life at the end of 2027. What happens then?**
-TeamSpeak has announced that TS3 reaches end-of-life at the end of 2027, but hasn't said what that means for TS3 clients on TS6 servers. If the TS3 client stops working with TS6 servers, the native engine doesn't depend on it.
-
-**Spotify / SoundCloud?**
-Paste a Spotify song, album or playlist link (`open.spotify.com/...` or `spotify.link/...`). Spotify doesn't let anyone else play its audio, so Mendil reads the song list from Spotify's public embed page (no account or API key needed) and plays each song from YouTube. It picks the result whose length matches Spotify's, so it usually gets the album version rather than a music video. The lookup happens just before a song plays, so a long playlist joins the queue at once. Spotify's page lists at most about 100 songs of a playlist, and `MAX_PLAYLIST_ITEMS` still applies. Private playlists can't be read.
-
-yt-dlp supports SoundCloud and many other sites, and direct links usually work.
-
-**Who can use the bot?**
-By default everyone who can write to it, and `!play` takes links to any site yt-dlp supports. Name admins with `ADMIN_UIDS` or `ADMIN_GROUPS` so only they control playback ([Roles](#roles)), and on a public server limit who can use it at all with `ALLOWED_UIDS` or `ALLOWED_GROUPS`. Each user can start a few searches at once and then one every few seconds, so one person can't keep the bot busy for everyone.
+The site's source is in [`site/`](site/). Changes to the docs go there.
 
 ## Development
 
 ```bash
 npm ci       # the native engine's one dependency
 npm test     # unit tests (Node.js 22.12+, no Docker needed)
-TS_HOST=127.0.0.1 TS_PORT=9987 node test/e2e/native-e2e.mjs   # against a running TS3/TS6 server
 ```
 
-The Classic engine and the rest of the controller use only the Node.js standard library. The native engine uses one dependency, [teamspeak-js](https://github.com/HoneyBBQ/teamspeak-js) (MIT), pinned to an exact version.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the end-to-end setup.
-
-```
-docker/entrypoint.sh        downloads the TS3 client, starts Xvfb + PulseAudio, runs the bot
-src/index.js                entry point, signal handling
-src/bot.js                  chat → commands, access control, health, watchdog (engine-agnostic)
-src/voice/classic.js        Classic engine: TS3 client process, ClientQuery, reconnects
-src/voice/native.js         Native engine: teamspeak-js connection, reconnects, identity
-src/voice/opus.js           Ogg/Opus demuxer and the 20 ms frame pacer (Native)
-src/requests.js             song requests, shared by chat commands and the web panel
-src/panel/                  web panel: HTTP API with server-sent events, and the page (public/)
-src/reconnect.js            reconnect policy (backoff, kicks, bans), unit-tested with a fake clock
-src/commands.js             chat commands
-src/player.js               queue and playback (file or yt-dlp stream → ffmpeg → PulseAudio)
-src/prefetch.js             downloads upcoming tracks and measures their loudness
-src/state.js                saves/restores the queue across restarts
-src/stats.js                periodic CPU/memory/timing log line
-src/ytdlp.js                resolves links, playlists and searches
-src/ytdlp-update.js         background yt-dlp updates with self-test and rollback
-src/i18n/                   chat messages per language
-src/ts3/client-process.js   runs the TS3 client and pre-configures settings.db
-src/ts3/clientquery.js      ClientQuery (telnet) client
-src/ts3/protocol.js         TS3 query escaping/parsing
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the end-to-end setup and [How it works](https://ulaski.github.io/mendil/project/how-it-works/) for a tour of the source.
 
 ## Legal
 

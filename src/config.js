@@ -101,7 +101,7 @@ export function loadConfig() {
       default: (env.RADIO || '').trim(),
     },
     panel: {
-      // 0 turns the web panel off. In Docker, publish the port to reach it (see README).
+      // 0 turns the web panel off. In Docker, publish the port to reach it (docs: guides/web-panel).
       port: int(env.PANEL_PORT, 8080, { min: 0, max: 65535 }),
       host: env.PANEL_HOST || '0.0.0.0',
       password: env.PANEL_PASSWORD || '',
