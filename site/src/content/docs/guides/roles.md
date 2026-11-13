@@ -5,7 +5,7 @@ description: "Admins and listeners: who may request songs, and who controls play
 
 Out of the box everyone can do everything. To keep the controls for a few people, name them as admins:
 
-```env
+```ini
 # e.g. your server's "Server Admin" group, and/or single people (!whoami shows your ID and groups)
 ADMIN_GROUPS=6
 ADMIN_UIDS=abc123=

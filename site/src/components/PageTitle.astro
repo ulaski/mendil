@@ -2,6 +2,8 @@
 // The page title as a jukebox title strip. Its selection code (B3 = third page of the second
 // sidebar group) matches the code the sidebar shows next to the same page.
 const { entry, sidebar } = Astro.locals.starlightRoute;
+// The same page as Markdown (src/pages/[...slug].md.ts), for pasting into an AI assistant.
+const markdown = `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}${entry.id}.md`;
 
 let code = null;
 sidebar.forEach((group, g) => {
@@ -16,6 +18,39 @@ sidebar.forEach((group, g) => {
   {code && <span class="title-strip__code" aria-hidden="true">{code}</span>}
   <h1 id="_top">{entry.data.title}</h1>
 </div>
+<div class="page-actions">
+  <button class="page-actions__copy" type="button" data-markdown={markdown}>
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></svg>
+    <span>Copy page</span>
+  </button>
+  <a class="page-actions__link" href={markdown}>View as Markdown</a>
+  <span class="page-actions__status" role="status"></span>
+</div>
+
+<script>
+  // Copies this page as Markdown, ready to paste into an AI assistant.
+  for (const button of document.querySelectorAll('.page-actions__copy')) {
+    button.addEventListener('click', async () => {
+      const status = button.parentElement.querySelector('.page-actions__status');
+      const label = button.querySelector('span');
+      try {
+        const res = await fetch(button.dataset.markdown);
+        if (!res.ok) throw new Error(String(res.status));
+        await navigator.clipboard.writeText(await res.text());
+        label.textContent = 'Copied';
+        status.classList.add('is-quiet'); // the button already says it; screen readers hear this
+        status.textContent = 'Page copied as Markdown';
+      } catch {
+        status.classList.remove('is-quiet');
+        status.textContent = 'Could not copy. Open "View as Markdown" instead.';
+      }
+      setTimeout(() => {
+        label.textContent = 'Copy page';
+        status.textContent = '';
+      }, 2500);
+    });
+  }
+</script>
 
 <style>
   .title-strip {
@@ -41,6 +76,60 @@ sidebar.forEach((group, g) => {
     font-size: 1.25rem;
     letter-spacing: 0.04em;
     font-variant-numeric: tabular-nums;
+  }
+  .page-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1rem;
+    margin-top: 0.75rem;
+    font-size: var(--sl-text-sm);
+  }
+  .page-actions__copy {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 2rem;
+    padding: 0 0.8rem;
+    border: 1px solid var(--sl-color-gray-4);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--sl-color-white);
+    font: inherit;
+    font-weight: 650;
+    cursor: pointer;
+  }
+  .page-actions__copy:hover {
+    border-color: var(--sl-color-accent);
+    color: var(--sl-color-accent-high);
+  }
+  .page-actions__copy svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .page-actions__link {
+    color: var(--sl-color-gray-2);
+    text-underline-offset: 0.2em;
+  }
+  .page-actions__link:hover {
+    color: var(--sl-color-accent-high);
+  }
+  .page-actions__status {
+    color: var(--sl-color-gray-3);
+  }
+  .page-actions__status:empty {
+    display: none;
+  }
+  .page-actions__status.is-quiet {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
   h1 {
     margin: 0;

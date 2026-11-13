@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Added
 - **Documentation site:** https://ulaski.github.io/mendil/, with a landing page and searchable docs, built with Astro Starlight from `site/` and published by GitHub Actions.
 - A test that fails when a setting the code reads or a chat command is missing from the docs.
+- Docs for AI assistants: every docs page has **Copy page** (copies it as Markdown) and **View as Markdown**, each page is also served at its address plus `.md`, and the site publishes [`llms.txt`](https://ulaski.github.io/mendil/llms.txt) and `llms-full.txt`.
 
 ### Changed
 - The README is shorter and links to the docs site for details. `PANEL_HOST` is now documented.

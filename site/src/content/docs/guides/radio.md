@@ -7,7 +7,7 @@ Mendil can play an internet radio station whenever the queue is empty. When some
 
 List your stations, and optionally pick one to start with:
 
-```env
+```ini
 RADIO_STATIONS=Groove Salad=https://somafm.com/groovesalad.pls,Radio Paradise=https://stream.radioparadise.com/mp3-128
 RADIO=Radio Paradise
 ```

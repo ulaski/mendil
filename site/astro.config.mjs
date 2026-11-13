@@ -1,6 +1,7 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import { sidebar } from './src/lib/sidebar.mjs';
 
 const repo = 'https://github.com/ulaski/mendil';
 
@@ -58,16 +59,7 @@ export default defineConfig({
         { tag: 'meta', attrs: { name: 'twitter:card', content: 'summary_large_image' } },
         { tag: 'link', attrs: { rel: 'apple-touch-icon', href: '/mendil/icon.png' } },
       ],
-      sidebar: [
-        { label: 'Start here', items: ['start/introduction', 'start/quick-start'] },
-        {
-          label: 'Guides',
-          items: ['guides/your-server', 'guides/server-settings', 'guides/roles', 'guides/web-panel', 'guides/radio', 'guides/youtube', 'guides/updating'],
-        },
-        { label: 'Reference', items: ['reference/commands', 'reference/configuration'] },
-        { label: 'Help', items: ['help/troubleshooting', 'help/faq'] },
-        { label: 'Project', items: ['project/how-it-works', 'project/contributing', 'project/changelog', 'project/legal'] },
-      ],
+      sidebar,
     }),
   ],
 });
