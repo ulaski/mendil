@@ -1,6 +1,6 @@
 {
   "name": "mendil",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Mendil: a self-hosted music bot for TeamSpeak 3 and 6. Request songs in chat, it plays them in your channel.",
   "keywords": [
     "teamspeak",

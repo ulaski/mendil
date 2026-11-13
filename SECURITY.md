@@ -27,7 +27,7 @@ Out of scope, please report these upstream:
 - On first start Mendil downloads the TeamSpeak client from TeamSpeak's servers. For the default version (3.6.2) the download is checked against the SHA-256 that TeamSpeak publishes, and a mismatch stops the container. For another version, set `TS3_CLIENT_SHA256`, or the download is used unverified (the log says so).
 - yt-dlp updates itself from PyPI in the background (`YTDLP_AUTO_UPDATE`). A new version must pass a self-test, otherwise it is rolled back, but a malicious release would still run once. Set `YTDLP_AUTO_UPDATE=false` if you'd rather take yt-dlp updates only with new Mendil images.
 - The native engine depends on [teamspeak-js](https://github.com/HoneyBBQ/teamspeak-js), pinned to an exact version in `package-lock.json`. Its identity is stored in the data volume (`mendil/native-identity`, readable only by the bot user); anyone with that file can connect as the bot.
-- `docker-compose.yml` uses the `latest` tag. To run exactly the version you tested, use a version tag such as `ghcr.io/ulaski/mendil:0.2.0`.
+- `docker-compose.yml` uses the `latest` tag. To run exactly the version you tested, use a version tag such as `ghcr.io/ulaski/mendil:0.3.0`.
 
 ## Good to know
 

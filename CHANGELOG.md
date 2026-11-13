@@ -5,12 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-13
+
+Roles for admins and listeners, web panel sign-in with TeamSpeak, and a smaller native image.
+
 ### Added
 - **Roles.** `ADMIN_UIDS` / `ADMIN_GROUPS` name the admins; everyone else is a listener. Listeners can request and search songs, see the queue, and skip or remove the songs they requested. Pause, stop, volume, loop, shuffle, clear, play-next, `!join` and other people's songs are for admins. Without admin lists, everyone stays an admin as before. `!help` lists only what you may use, and `!whoami` shows your role.
 - **Web panel sign-in with TeamSpeak.** Type your nickname, get a one-time code from Mendil in a private message, and the panel knows who you are: your role matches chat, and your requests carry your name. The panel password still works and always signs you in as an admin. Listeners don't see the log.
 
 ### Changed
 - The native image uses a static ffmpeg build ([wader/static-ffmpeg](https://github.com/wader/static-ffmpeg), pinned by digest) instead of Debian's, which brought ~400 MB of shared libraries with it. The image shrinks from 284 MB to 185 MB compressed (1.12 GB to 740 MB unpacked). The classic image keeps Debian's ffmpeg, because it plays into PulseAudio.
+- Panel sessions from 0.2.0 end after the update, because the session cookie changed: sign in again once.
 
 ### Fixed
 - The native engine's "from source" instructions built an untagged image, so Compose pulled the published one instead; the README now adds a `build` section. `.env.example` no longer sets `VOICE_BACKEND`, which had overridden the native image's engine.
@@ -88,7 +93,8 @@ First public version of 🧻 Mendil.
 - A `stats:` log line every 10 minutes, and `/tmp/mendil-health.json` with connection details.
 - English and Turkish chat messages (`BOT_LANGUAGE`). Adding a language means translating one file.
 
-[Unreleased]: https://github.com/ulaski/mendil/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/ulaski/mendil/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/ulaski/mendil/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ulaski/mendil/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/ulaski/mendil/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/ulaski/mendil/releases/tag/v0.1.0

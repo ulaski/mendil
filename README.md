@@ -294,7 +294,7 @@ docker compose pull && docker compose up -d
 # from source: git pull && docker compose up -d --build
 ```
 
-`latest` always points to the newest release. To stay on a version you've tested, use its tag instead, e.g. `image: ghcr.io/ulaski/mendil:0.2.0`.
+`latest` always points to the newest release. To stay on a version you've tested, use its tag instead, e.g. `image: ghcr.io/ulaski/mendil:0.3.0`.
 
 yt-dlp also updates itself in the background, daily and whenever YouTube extraction starts failing, so most YouTube changes need no action.
 
