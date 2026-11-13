@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- **Radio.** `RADIO_STATIONS` lists internet radio stations and `RADIO` picks one. The radio plays whenever the queue is empty; a request interrupts it, and it comes back once the queue runs out. `!radio` shows the stations, admins switch with `!radio <name or address>` or `!radio off`, and the web panel has a station picker. The station's current song (ICY metadata) shows in `!np` and in the panel. Icecast/SHOUTcast MP3, AAC and Ogg streams, HLS, and `.pls` / `.m3u` links work.
+- **Pause when alone** (`PAUSE_WHEN_ALONE`, on by default). When nobody else has been in the channel for 30 seconds, Mendil pauses and stops transmitting, and it carries on when someone joins. The panel's lamp says NO LISTENERS meanwhile.
+
 ## [0.4.0] - 2026-11-13
 
 Spotify links.

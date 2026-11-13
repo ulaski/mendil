@@ -26,5 +26,6 @@ export function createI18n(language = 'en', defaults = {}) {
     t,
     commandAliases: dict.commandAliases ?? {},
     loopAliases: dict.loopAliases ?? {},
+    radioOffWords: dict.radioOffWords ?? [],
   };
 }

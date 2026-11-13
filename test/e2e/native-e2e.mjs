@@ -44,6 +44,22 @@ const tone = path.join(dir, 'tone.mp3');
 execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=30',
   '-c:a', 'libmp3lame', '-b:a', '128k', tone]);
 const server = http.createServer((req, res) => {
+  if (req.url === '/radio') {
+    // A radio station: the tone on repeat, with an ICY title every 8 KB.
+    res.writeHead(200, { 'content-type': 'audio/mpeg', 'icy-metaint': '8192' });
+    const audio = fs.readFileSync(tone);
+    const meta = Buffer.alloc(32);
+    Buffer.from("StreamTitle='E2E - Tone';").copy(meta);
+    let offset = 0;
+    const timer = setInterval(() => {
+      const chunk = Buffer.alloc(8192);
+      for (let i = 0; i < chunk.length; i++) chunk[i] = audio[(offset + i) % audio.length];
+      offset += chunk.length;
+      res.write(Buffer.concat([chunk, Buffer.from([2]), meta]));
+    }, 400); // 8 KB per 0.4 s is a bit faster than 128 kbit/s
+    res.on('close', () => clearInterval(timer));
+    return;
+  }
   if (req.url !== '/tone.mp3') return void res.writeHead(404).end();
   res.writeHead(200, { 'content-type': 'audio/mpeg', 'content-length': fs.statSync(tone).size });
   fs.createReadStream(tone).pipe(res);
@@ -76,6 +92,7 @@ mendil = spawn(process.execPath, [path.join(ROOT, 'src/index.js')], {
     PANEL_PORT: String(panelPort),
     PANEL_HOST: '127.0.0.1',
     PANEL_PASSWORD: 'e2e-password',
+    RADIO_STATIONS: `E2E FM=http://127.0.0.1:${server.address().port}/radio`,
   },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
@@ -154,6 +171,14 @@ try {
   await ask('!stop', /Stopped/);
   await sleep(1_500);
   if (Date.now() - lastFrameAt < 1_000) fail('still sending after !stop');
+
+  // Radio: plays while the queue is empty, with the station's song title.
+  await ask('!radio e2e fm', /Radio on: E2E FM/);
+  const radioFrom = frames;
+  await until('voice from the radio', () => frames >= radioFrom + 100, 30_000);
+  await ask('!np', /E2E FM.*: E2E - Tone/);
+  await ask('!radio off', /Radio turned off/);
+  log(`radio: ${frames - radioFrom} frames`);
 
   // Web panel: sign in as the test client with a code sent by private message.
   const before = replies.length;

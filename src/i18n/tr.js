@@ -67,6 +67,20 @@ export default {
   joinFailed: 'Kanala geçemedim: {reason}',
   clientNotFound: 'seni bulamadım',
 
+  // radyo
+  radioOn: '📻 Radyo: {station}',
+  radioNow: '📻 {station}: {title}',
+  radioStatus: '📻 Radyo açık: {station}. Kuyruk boşken çalar.',
+  radioIsOff: 'Radyo kapalı.',
+  radioStations: 'İstasyonlar: {stations}. {prefix}radio <isim ya da link> ile değiştirir, {prefix}radio kapat ile kapatırsın.',
+  radioNoStations: 'Tanımlı istasyon yok (RADIO_STATIONS). {prefix}radio <link> ile bir istasyonu yayın adresinden çalabilirsin.',
+  radioUnknown: '"{name}" diye bir istasyon yok. İstasyonlar: {stations}',
+  radioSet: '📻 Radyo açıldı: {station}. Kuyruk boşken çalar.',
+  radioSetLater: '📻 Radyo {station} olarak ayarlandı. Kuyruk bitince başlar.',
+  radioTurnedOff: 'Radyo kapatıldı.',
+  radioSkip: 'Şu an sadece radyo çalıyor. {prefix}radio kapat ile kapatabilirsin.',
+  radioOffWords: ['kapat', 'kapalı', 'kapali'],
+
   commandsTitle: 'Komutlar:',
   help: {
     play: 'Çalar veya kuyruğun sonuna ekler (YouTube ya da Spotify linki, çalma listesi, albüm ya da arama)',
@@ -84,6 +98,7 @@ export default {
     shuffle: 'Kuyruğu karıştırır',
     loop: 'Tekrar modu: kapalı / şarkı / liste',
     vol: 'Ses seviyesini gösterir / ayarlar',
+    radio: 'Kuyruk boşken çalan radyo: durumu gösterir, istasyon seçer ya da kapatır',
     join: 'Botu bulunduğun kanala çeker',
     whoami: 'Benzersiz kimliğini ve sunucu gruplarını gösterir (yetki ayarı için)',
     help: 'Bu liste',
@@ -96,6 +111,7 @@ export default {
     remove: '<numara>',
     loop: '[off|one|all]',
     vol: '[0-100]',
+    radio: '[isim | link | off]',
   },
 
   commandAliases: {
@@ -114,6 +130,7 @@ export default {
     shuffle: ['karistir', 'karıştır'],
     loop: ['tekrar'],
     vol: ['ses'],
+    radio: ['radyo'],
     join: ['gel'],
     whoami: ['kimim', 'ben'],
     help: ['yardim', 'yardım', 'komutlar'],

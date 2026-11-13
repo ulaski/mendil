@@ -24,6 +24,9 @@ const STRINGS = {
     addedNow: '"{title}" is going on air.', addedMany: 'Added {count} tracks{from}.',
     from: ' from "{name}"', skippedLong: ' ({count} too long, skipped)',
     loop: 'Repeat', loopOff: 'Off', loopOne: 'Track', loopAll: 'Queue',
+    radio: 'Radio', radioOff: 'Off', radioHint: 'Plays whenever the running order is empty. Requests interrupt it.',
+    radioBy: 'Radio: {name}', thenRadio: 'then radio', lampWaiting: 'NO LISTENERS',
+    queueEmptyRadio: 'Nothing scheduled, so the radio is on. Requests from the panel and from TeamSpeak chat interrupt it.',
     log: 'Log', logMore: 'Show more', logLess: 'Show less',
     connected: 'In {channel}', connectedNoName: 'Connected', disconnected: 'Not connected', reconnecting: 'Reconnecting since {time}',
     engineClassic: 'Classic engine', engineNative: 'Native engine', halted: 'Playback stopped after repeated errors. Resume to try again.',
@@ -37,6 +40,7 @@ const STRINGS = {
       adminOnly: 'Only admins can do that.', notYours: 'You can only skip or remove songs you requested.',
       notOnline: "Nobody with that nickname is on the server. Check the spelling, or join first.",
       notAllowed: "You're not allowed to use this bot.", codeRecentlySent: 'A code was sent a moment ago. Check your TeamSpeak chat, or wait half a minute.',
+      unknownStation: 'That station is not in RADIO_STATIONS.',
       wrongCode: "That code didn't match.", codeExpired: 'That code has expired. Ask for a new one.',
       teamspeakOffline: "Mendil isn't connected to TeamSpeak right now. Use the panel password.",
     },
@@ -65,6 +69,9 @@ const STRINGS = {
     addedNow: '"{title}" yayına giriyor.', addedMany: '{count} parça eklendi{from}.',
     from: ' ("{name}" listesinden)', skippedLong: ' ({count} tanesi çok uzun olduğu için atlandı)',
     loop: 'Tekrar', loopOff: 'Kapalı', loopOne: 'Parça', loopAll: 'Kuyruk',
+    radio: 'Radyo', radioOff: 'Kapalı', radioHint: 'Yayın akışı boşken çalar. Gelen istekler radyoyu keser.',
+    radioBy: 'Radyo: {name}', thenRadio: 'sonra radyo', lampWaiting: 'DİNLEYEN YOK',
+    queueEmptyRadio: 'Akışta bir şey yok, o yüzden radyo çalıyor. Panelden ve TeamSpeak sohbetinden gelen istekler radyoyu keser.',
     log: 'Log', logMore: 'Daha fazla', logLess: 'Daha az',
     connected: '{channel} kanalında', connectedNoName: 'Bağlı', disconnected: 'Bağlı değil', reconnecting: '{time} saatinden beri yeniden bağlanıyor',
     engineClassic: 'Classic motor', engineNative: 'Native motor', halted: 'Art arda hata olduğu için çalma durdu. Tekrar denemek için Devam et.',
@@ -78,6 +85,7 @@ const STRINGS = {
       adminOnly: 'Bunu sadece yöneticiler yapabilir.', notYours: 'Sadece kendi istediğin şarkıları geçebilir veya silebilirsin.',
       notOnline: 'Sunucuda bu takma adla kimse yok. Yazımı kontrol et ya da önce sunucuya gir.',
       notAllowed: 'Bu botu kullanma yetkin yok.', codeRecentlySent: 'Az önce bir kod gönderildi. TeamSpeak sohbetine bak ya da yarım dakika bekle.',
+      unknownStation: "Bu istasyon RADIO_STATIONS'ta yok.",
       wrongCode: 'Kod tutmadı.', codeExpired: 'Bu kodun süresi doldu. Yenisini iste.',
       teamspeakOffline: "Mendil şu an TeamSpeak'e bağlı değil. Panel şifresini kullan.",
     },
@@ -286,13 +294,17 @@ function renderOnAir(s) {
   const strip = lamp.closest('.onair');
   strip.dataset.state = lampState;
   strip.classList.toggle('has-track', Boolean(c));
-  $('lamp-text').textContent = t({ on: 'lampOn', paused: 'lampPaused', off: 'lampOff', offline: 'lampOffline' }[lampState]);
+  // Paused because nobody is in the channel: say so, it isn't someone's pause.
+  const lampKey = lampState === 'paused' && s.waiting ? 'lampWaiting' : { on: 'lampOn', paused: 'lampPaused', off: 'lampOff', offline: 'lampOffline' }[lampState];
+  $('lamp-text').textContent = t(lampKey);
 
   const link = $('now-link');
   $('now-empty').hidden = Boolean(c);
   link.hidden = !c;
-  if (c && c.title !== lastTitle) {
-    link.textContent = c.title;
+  // The radio: the song title the station sends, under the station's name.
+  const shownTitle = c ? (c.radio && c.streamTitle ? c.streamTitle : c.title) : null;
+  if (c && shownTitle !== lastTitle) {
+    link.textContent = shownTitle;
     const title = $('now-title');
     if (lastTitle !== null && !reducedMotion.matches) {
       title.classList.remove('is-entering');
@@ -300,10 +312,10 @@ function renderOnAir(s) {
       title.classList.add('is-entering');
     }
   }
-  lastTitle = c ? c.title : '';
+  lastTitle = c ? shownTitle : '';
   if (c) link.href = c.url;
 
-  $('now-by').textContent = c?.requestedBy ? t('requestedBy', { name: c.requestedBy }) : '';
+  $('now-by').textContent = c?.radio ? t('radioBy', { name: c.title }) : c?.requestedBy ? t('requestedBy', { name: c.requestedBy }) : '';
   $('now-time').textContent = c ? `${duration(c.position)} / ${c.isLive ? t('live') : duration(c.duration)}` : '';
   // Back-timing, as a studio reads it: how long until the next item airs.
   $('now-left').textContent = c && !c.isLive && Number.isFinite(c.duration) ? t('left', { time: duration(c.duration - c.position) }) : '';
@@ -321,7 +333,7 @@ function renderOnAir(s) {
   $('playpause-icon').setAttribute('href', !c || s.paused ? '#i-play' : '#i-pause');
   $('playpause-label').textContent = t(!c ? 'start' : s.paused ? 'resume' : 'pause');
   $('playpause').disabled = !c && s.queue.length === 0;
-  $('skip').disabled = !c || !(isAdmin() || isMine(c));
+  $('skip').disabled = !c || (c.radio && s.queue.length === 0) || !(isAdmin() || isMine(c));
   $('stop').disabled = !c && s.queue.length === 0;
   if (document.activeElement !== $('volume')) {
     $('volume').value = s.volume;
@@ -353,6 +365,7 @@ function renderOrder(s) {
   });
 
   $('order-empty').hidden = s.queue.length > 0;
+  $('order-empty').textContent = t(s.radio ? 'queueEmptyRadio' : 'queueEmpty');
   const summary = $('schedule-summary');
   if (s.queue.length) {
     const total = s.queue.reduce((sum, q) => sum + (q.duration || 0), 0);
@@ -361,6 +374,7 @@ function renderOrder(s) {
       t('total', { duration: duration(total) }),
     ];
     if (end) parts.push(t('ends', { time: clock(end) }));
+    if (s.radio) parts.push(t('thenRadio'));
     summary.replaceChildren(...parts.map((p) => Object.assign(document.createElement('span'), { textContent: p })));
   } else {
     summary.replaceChildren();
@@ -417,6 +431,29 @@ function animateRows(body, before) {
   }
 }
 
+let radioKey = '';
+function renderRadio(s) {
+  const panel = $('radio-panel');
+  panel.classList.toggle('is-unused', s.stations.length === 0 && !s.radio);
+  const select = $('radio-select');
+  const custom = s.radio && !s.stations.includes(s.radio.name) ? s.radio.name : null; // set from chat by address
+  const key = `${lang}|${s.stations.join('\n')}|${custom}`;
+  if (key !== radioKey) {
+    radioKey = key;
+    const option = (value, label, disabled = false) => Object.assign(document.createElement('option'), { value, textContent: label, disabled });
+    select.replaceChildren(option('', t('radioOff')), ...s.stations.map((n) => option(n, n)), ...(custom ? [option('', custom, true)] : []));
+  }
+  if (document.activeElement !== select) {
+    if (custom) select.selectedIndex = select.options.length - 1;
+    else select.value = s.radio?.name ?? '';
+  }
+}
+
+$('radio-select').addEventListener('change', async (e) => {
+  const result = await api('POST', '/api/radio', { station: e.target.value || null });
+  if (!result.ok) showResult(errorText(result), true);
+});
+
 function render(s) {
   state = s;
   if (s.lang && s.lang !== lang && STRINGS[s.lang]) {
@@ -426,6 +463,7 @@ function render(s) {
   renderBar(s);
   renderOnAir(s);
   renderOrder(s);
+  renderRadio(s);
   if (s.halted && !$('request-result').textContent) showResult(t('halted'), true);
 }
 

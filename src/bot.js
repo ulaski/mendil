@@ -14,6 +14,7 @@ import { chunkMessage, formatDuration, safe, stripBBCode, trackLink } from './fo
 import { isYoutubeBlock, YOUTUBE_DOCS_URL } from './ytdlp.js';
 import { createBackend } from './voice/index.js';
 import { needsGroups, ROLE_RANK, roleFor } from './roles.js';
+import { findStation } from './radio.js';
 
 export { isProcessAlive } from './voice/classic.js';
 
@@ -24,6 +25,10 @@ const WATCHDOG_INTERVAL_MS = 10_000;
 const STATE_SAVE_INTERVAL_MS = 5_000;
 const STATS_INTERVAL_MS = 10 * 60_000;
 const GIVE_UP_DISCONNECTED_MS = 20 * 60_000; // then exit for a clean container restart
+// PAUSE_WHEN_ALONE: how often to look, and how long the channel must stay empty (people hop
+// between channels; the bot also joins an empty channel first).
+const ALONE_CHECK_MS = 3_000;
+const ALONE_GRACE_MS = 30_000;
 
 // Minimum gap between outgoing chat messages, to stay clear of the server's anti-flood.
 const MESSAGE_GAP_MS = 300;
@@ -49,6 +54,10 @@ export class Bot {
   #stopping = false;
   #watchdogBusy = false;
   #pausedByDisconnect = false;
+  #pausedAlone = false;
+  #aloneSince = null;
+  #aloneBusy = false;
+  #aloneOverride = false; // someone pressed resume while the channel was empty: respect it
   #restored = null; // { tracks, paused } until the restored queue has been started
   #sendQueue = Promise.resolve();
   #resolveTimes = [];
@@ -58,8 +67,9 @@ export class Bot {
   #limiter = new RateLimiter(); // per user, for commands that start yt-dlp
   #stats = new StatsReporter();
 
-  constructor(config, log, { backend } = {}) {
+  constructor(config, log, { backend, timing = {} } = {}) {
     this.config = config;
+    this.timing = { aloneCheckMs: ALONE_CHECK_MS, aloneGraceMs: ALONE_GRACE_MS, ...timing };
     this.log = log;
     this.i18n = createI18n(config.bot.language, { prefix: config.bot.prefix });
     const { t } = this.i18n;
@@ -86,7 +96,9 @@ export class Bot {
 
     this.player.on('trackStart', (track) => {
       this.setTransmitting(true);
-      if (config.bot.announceTracks) {
+      if (track.radio) {
+        if (config.bot.announceTracks) this.sendChannel(t('radioOn', { station: trackLink(track) }));
+      } else if (config.bot.announceTracks) {
         const length = track.isLive ? t('live') : formatDuration(track.duration);
         this.sendChannel(t('nowPlaying', { track: trackLink(track), length, user: safe(track.requestedBy) }));
       }
@@ -120,14 +132,26 @@ export class Bot {
       this.#restored = this.player.restore(saved);
       if (this.#restored.tracks > 0) {
         this.log.info(`restored ${this.#restored.tracks} track(s); playback resumes once connected${this.#restored.paused ? ' (was paused)' : ''}`);
-      } else {
-        this.#restored = null;
       }
     }
+    // RADIO is the station on first start; a station chosen with !radio is remembered, until
+    // RADIO itself is changed.
+    const { default: radioDefault, stations } = this.config.radio;
+    if (!saved || (saved.radioDefault ?? '') !== radioDefault) {
+      const station = findStation(stations, radioDefault);
+      if (radioDefault && !station) this.log.warn(`RADIO="${radioDefault}" is neither a station in RADIO_STATIONS nor a web address`);
+      this.player.radio = station;
+      // A new RADIO is a fresh start, even if the old station had stopped on errors.
+      if (saved && station && this.#restored) this.#restored.paused = false;
+    }
+    if (this.player.radio) this.log.info(`radio: ${this.player.radio.name} plays whenever the queue is empty`);
+    if (!(this.#restored?.tracks > 0) && !this.player.radio) this.#restored = null;
+    else this.#restored ??= { tracks: 0, paused: false };
     await this.player.init();
     this.updater.start();
     this.#timers.push(setInterval(() => this.#saveState(), STATE_SAVE_INTERVAL_MS));
     this.#timers.push(setInterval(() => this.#logStats(), STATS_INTERVAL_MS));
+    if (this.config.bot.pauseWhenAlone) this.#timers.push(setInterval(() => this.#checkAlone(), this.timing.aloneCheckMs));
     this.#stats.sample(Date.now()); // baseline for the first CPU numbers
     await this.voice.start();
     await this.#watchdog();
@@ -154,6 +178,9 @@ export class Bot {
   #saveState() {
     const snapshot = this.player.snapshot();
     if (this.#restored?.paused) snapshot.paused = true; // restored but not started yet
+    // Paused only because nobody was listening (or connected): play again after a restart.
+    if (this.#pausedAlone || this.#pausedByDisconnect) snapshot.paused = false;
+    snapshot.radioDefault = this.config.radio.default;
     snapshot.hinted = [...this.#hinted];
     this.state.save(snapshot);
   }
@@ -219,6 +246,53 @@ export class Bot {
     // Only transmit while music is actually playing.
     await this.setTransmitting(this.player.isPlaying && !this.player.paused);
     this.#writeHealth();
+  }
+
+  /** True while playback waits for someone to join the channel (PAUSE_WHEN_ALONE). */
+  get waitingForListeners() {
+    return this.#pausedAlone && this.player.paused;
+  }
+
+  /**
+   * PAUSE_WHEN_ALONE: nobody else in the channel for a while -> pause and go quiet; someone
+   * comes back -> carry on. Only undoes pauses it made itself.
+   */
+  async #checkAlone() {
+    if (this.#aloneBusy || this.#stopping || !this.voice.connected) return;
+    this.#aloneBusy = true;
+    try {
+      const count = await this.voice.listenerCount();
+      if (count == null) return;
+      const now = Date.now();
+      if (count > 0) {
+        this.#aloneSince = null;
+        this.#aloneOverride = false;
+        if (this.#pausedAlone) {
+          this.#pausedAlone = false;
+          if (this.player.paused && this.player.resume()) {
+            this.log.info('someone joined the channel: resuming');
+            await this.setTransmitting(true);
+          }
+        }
+        return;
+      }
+      this.#aloneSince ??= now;
+      if (this.#pausedAlone && !this.player.paused) {
+        // Resumed by hand while nobody is here (e.g. from the web panel): leave it playing.
+        this.#pausedAlone = false;
+        this.#aloneOverride = true;
+      }
+      if (now - this.#aloneSince < this.timing.aloneGraceMs || this.#pausedAlone || this.#aloneOverride) return;
+      if (this.player.isPlaying && !this.player.paused && this.player.pause()) {
+        this.#pausedAlone = true;
+        this.log.info('nobody else is in the channel: pausing until someone joins');
+        await this.setTransmitting(false);
+      }
+    } catch (err) {
+      this.log.debug(`listener check failed: ${err.message}`);
+    } finally {
+      this.#aloneBusy = false;
+    }
   }
 
   #onDisconnected() {

@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
+import http from 'node:http';
 import { Player, MAX_CONSECUTIVE_FAILURES } from '../src/player.js';
 import { Prefetcher } from '../src/prefetch.js';
 
@@ -293,4 +294,76 @@ test('Spotify songs are looked up on YouTube when they come up, the next one ahe
   ]);
   assert.ok(!calls().some((c) => c.args?.includes('https://open.spotify.com/track/x')), 'the Spotify link itself is never played');
   assert.equal(lookups.filter((l) => l === 'Fontaines D.C. - Mimesis').length, 1, 'one lookup per song');
+});
+
+/** A local ICY radio station: audio plus a title every 16 bytes; counts connections. */
+async function fakeStation() {
+  const station = { connections: 0, open: 0 };
+  const server = http.createServer((req, res) => {
+    station.connections++;
+    station.open++;
+    res.writeHead(200, { 'content-type': 'audio/mpeg', 'icy-metaint': '16' });
+    const text = Buffer.from("StreamTitle='Artist - Live Song';");
+    const meta = Buffer.alloc(48);
+    text.copy(meta);
+    const timer = setInterval(() => res.write(Buffer.concat([Buffer.alloc(16, 1), Buffer.from([3]), meta])), 30);
+    res.on('close', () => {
+      clearInterval(timer);
+      station.open--;
+    });
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  station.url = `http://127.0.0.1:${server.address().port}/live`;
+  station.close = () => new Promise((r) => { server.closeAllConnections(); server.close(r); });
+  return station;
+}
+
+test('radio: plays when the queue is empty, gives way to requests, then comes back', async () => {
+  const station = await fakeStation();
+  const { player, events } = setup();
+  const titles = [];
+  player.on('streamTitle', (_t, title) => titles.push(title));
+  try {
+    player.setRadio({ name: 'Test FM', url: station.url });
+    await waitFor(() => names(events).includes('trackStart'));
+    assert.equal(player.current.radio, true);
+    await waitFor(() => titles.length > 0);
+    assert.equal(player.current.streamTitle, 'Artist - Live Song');
+    assert.equal(player.skip(), false, 'nothing to skip to');
+
+    player.add([track('ok://request')]);
+    await waitFor(() => events.some(([e, url]) => e === 'trackStart' && url === 'ok://request'));
+    await waitFor(() => station.open === 0); // hung up on the station
+    await waitFor(() => events.filter(([e, url]) => e === 'trackStart' && url === station.url).length === 2);
+    assert.equal(station.connections, 2, 'back on the radio after the request');
+
+    assert.equal(player.snapshot().current, null, 'the radio is not saved as a queue entry');
+    assert.deepEqual(player.snapshot().radio, { name: 'Test FM', url: station.url });
+    player.stop();
+    assert.equal(player.radio, null, 'stop turns the radio off');
+    await waitFor(() => station.open === 0);
+  } finally {
+    player.dispose();
+    await station.close();
+  }
+});
+
+test('radio: pausing hangs up, resuming reconnects to the live stream', async () => {
+  const station = await fakeStation();
+  const { player, events } = setup();
+  try {
+    player.setRadio({ name: 'Test FM', url: station.url });
+    await waitFor(() => names(events).includes('trackStart'));
+    assert.equal(player.pause(), true);
+    await waitFor(() => station.open === 0);
+    assert.equal(player.resume(), true);
+    await waitFor(() => station.connections === 2 && station.open === 1);
+    assert.equal(names(events).filter((e) => e === 'trackStart').length, 1, 'no second announcement');
+    player.setRadio(null);
+    await waitFor(() => names(events).includes('idle'));
+    await waitFor(() => station.open === 0);
+  } finally {
+    player.dispose();
+    await station.close();
+  }
 });

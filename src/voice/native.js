@@ -369,6 +369,15 @@ export class NativeBackend extends EventEmitter {
     return { moved: true };
   }
 
+  async listenerCount() {
+    if (!this.connected || !this.me.cid) return null;
+    let count = 0;
+    for (const c of this.#client.view.clients.values()) {
+      if (c.type === 0 && c.id !== this.#client.clientID && String(c.channelID) === this.me.cid) count++;
+    }
+    return count;
+  }
+
   async findClientByName(nickname) {
     const want = nickname.toLowerCase();
     for (const c of this.#client.view.clients.values()) {

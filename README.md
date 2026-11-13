@@ -27,6 +27,8 @@ In Türkiye, people at a *gazino* or *meyhane* used to write their song request 
 
 - 🎵 Plays YouTube links, whole playlists, or the first result for a search. Spotify songs, albums and playlists work too: Mendil finds each song on YouTube.
 - 📝 Has a proper queue: search and pick, play next, skip, pause, loop, shuffle and volume
+- 📻 Plays an internet radio station whenever the queue is empty, so the channel never goes quiet. A request interrupts the radio, and it comes back afterwards.
+- 💤 Pauses while nobody is in its channel and carries on when someone joins
 - 🔊 Keeps every track at the same loudness, so nobody has to ride the volume
 - 🐳 Runs as one container. You accept the TeamSpeak license and give it your server's address.
 - ⏭️ Downloads the next track while the current one plays, so songs follow each other without a gap
@@ -226,6 +228,7 @@ Mendil reads its own channel's chat and private messages sent to it. In private 
 | `!shuffle` 🔒 | | Shuffle the queue |
 | `!loop [off\|one\|all]` 🔒 | `!repeat` | Loop nothing, the current track, or the whole queue |
 | `!vol [0-100]` | `!volume`, `!v` | Show the volume; setting it is for admins 🔒 |
+| `!radio [name \| link \| off]` | | Show the radio and its stations. Picking a station or turning it off is for admins 🔒. See [Radio](#radio). |
 | `!join` 🔒 | `!come` | Move the bot to your channel. From another channel, send it as a private message. |
 | `!whoami` | `!me`, `!id` | Show your unique ID, server groups and role |
 | `!help` | `!h`, `!commands` | List commands |
@@ -242,9 +245,28 @@ ADMIN_GROUPS=6
 ADMIN_UIDS=abc123=
 ```
 
-Everyone else becomes a listener. Listeners can request and search songs, see what's playing and the queue, and skip or remove the songs they requested themselves. Pausing, stopping, the volume, loop, shuffle, clearing, play-next, `!join` and other people's songs are for admins. The web panel follows the same rules.
+Everyone else becomes a listener. Listeners can request and search songs, see what's playing and the queue, and skip or remove the songs they requested themselves. Pausing, stopping, the volume, loop, shuffle, clearing, play-next, the radio station, `!join` and other people's songs are for admins. The web panel follows the same rules.
 
 To keep some people out entirely, add `ALLOWED_UIDS` / `ALLOWED_GROUPS`: then only those people (and the admins) can use the bot at all.
+
+### Radio
+
+Mendil can play an internet radio station whenever the queue is empty. When someone requests a song, the radio stops at once and the song plays; when the queue runs out, the radio comes back. The station's current song shows in `!np` and in the web panel.
+
+List your stations, and optionally pick one to start with:
+
+```env
+RADIO_STATIONS=Groove Salad=https://somafm.com/groovesalad.pls,Radio Paradise=https://stream.radioparadise.com/mp3-128
+RADIO=Radio Paradise
+```
+
+Then `!radio` shows the stations, `!radio <name>` switches (admins), and `!radio off` turns it off. Admins can also use a stream address directly, as in `!radio https://…`, and pick a station in the web panel. Mendil remembers the choice across restarts until you change `RADIO`. `!stop` turns the radio off too.
+
+Most Icecast and SHOUTcast streams work (MP3, AAC, Ogg), as do HLS streams and `.pls` / `.m3u` playlist links. A station that keeps failing is stopped after three tries, like a song. Some stations refuse anything that isn't their own player; then Mendil says what the station answered.
+
+### When nobody is listening
+
+When Mendil is the only one in its channel for 30 seconds, it pauses and stops transmitting. When someone joins, it continues, and the radio reconnects to the live stream. If you resume it by hand while the channel is empty (from the web panel, say), it keeps playing. `PAUSE_WHEN_ALONE=false` turns this off.
 
 ## Configuration
 
@@ -267,6 +289,9 @@ All settings are environment variables, usually set in `.env`.
 | `ALLOWED_GROUPS` | | Comma-separated server group IDs allowed to use the bot at all. If both lists are empty, everyone can; `!help` and `!whoami` always work, and admins are always allowed. |
 | `CHANNEL_HINTS` | `true` | Post a hint when the channel's codec or talk power is wrong for music |
 | `ANNOUNCE_TRACKS` | `true` | Post "Now playing" messages |
+| `PAUSE_WHEN_ALONE` | `true` | Pause while nobody else is in the bot's channel ([details](#when-nobody-is-listening)) |
+| `RADIO_STATIONS` | | Radio stations, as `name=stream address` separated by commas ([Radio](#radio)) |
+| `RADIO` | | Station name or stream address that plays whenever the queue is empty, from the first start |
 | `DEFAULT_VOLUME` | `70` | Start-up volume, 0 to 100 |
 | `NORMALIZE_AUDIO` | `true` | Loudness-normalise tracks to -16 LUFS |
 | `MAX_QUEUE` | `100` | Max queue length |

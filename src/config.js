@@ -1,5 +1,6 @@
 import os from 'node:os';
 import path from 'node:path';
+import { parseStations } from './radio.js';
 
 const env = process.env;
 
@@ -73,6 +74,8 @@ export function loadConfig() {
       adminUids: list(env.ADMIN_UIDS),
       adminGroups: list(env.ADMIN_GROUPS),
       channelHints: bool(env.CHANNEL_HINTS, true),
+      // Pause (and stop transmitting) while nobody else is in the bot's channel.
+      pauseWhenAlone: bool(env.PAUSE_WHEN_ALONE, true),
       announceTracks: bool(env.ANNOUNCE_TRACKS, true),
     },
     player: {
@@ -89,6 +92,11 @@ export function loadConfig() {
       prefetch: bool(env.PREFETCH, true),
       prefetchDir: env.PREFETCH_DIR || '/tmp/mendil-cache',
       prefetchMaxDuration: int(env.PREFETCH_MAX_DURATION, 30 * 60, { min: 0 }),
+    },
+    radio: {
+      stations: parseStations(env.RADIO_STATIONS),
+      // Station name or stream address that plays whenever the queue is empty, from the start.
+      default: (env.RADIO || '').trim(),
     },
     panel: {
       // 0 turns the web panel off. In Docker, publish the port to reach it (see README).

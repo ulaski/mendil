@@ -213,7 +213,7 @@ test('roles: listeners request and manage their own songs, admins do the rest', 
     assert.equal((await call('POST', '/api/play', { cookie: listener, body: { query: 'mimesis' } })).json.ok, true);
     assert.deepEqual(requested.at(-1), { query: 'mimesis', front: false, requestedBy: 'Cem', requesterUid: 'uid-cem' });
 
-    for (const [route, body] of [['/api/stop'], ['/api/pause'], ['/api/clear'], ['/api/shuffle'], ['/api/volume', { volume: 10 }], ['/api/loop', { mode: 'one' }], ['/api/play', { query: 'x', next: true }]]) {
+    for (const [route, body] of [['/api/radio', { station: null }], ['/api/stop'], ['/api/pause'], ['/api/clear'], ['/api/shuffle'], ['/api/volume', { volume: 10 }], ['/api/loop', { mode: 'one' }], ['/api/play', { query: 'x', next: true }]]) {
       const res = await call('POST', route, { cookie: listener, body: body ?? {} });
       assert.equal(res.status, 403, route);
       assert.equal(res.json.error, 'adminOnly', route);
@@ -243,6 +243,21 @@ test('roles: listeners request and manage their own songs, admins do the rest', 
     roles.adminGroups = [];
     roles.allowedUids = [];
   }
+});
+
+test('radio: admins pick a configured station or turn it off; the state shows it', async () => {
+  bot.config.radio = { stations: [{ name: 'Test FM', url: 'https://radio.example/live' }], default: '' };
+  player.radio = null;
+  player.setRadio = (station) => { player.radio = station; };
+  const cookie = await login();
+  assert.equal((await call('POST', '/api/radio', { cookie, body: { station: 'test fm' } })).json.ok, true);
+  assert.deepEqual(player.radio, { name: 'Test FM', url: 'https://radio.example/live' });
+  const state = (await call('GET', '/api/state', { cookie })).json;
+  assert.deepEqual(state.radio, { name: 'Test FM', url: 'https://radio.example/live' });
+  assert.deepEqual(state.stations, ['Test FM']);
+  assert.equal((await call('POST', '/api/radio', { cookie, body: { station: 'https://evil.example/x' } })).json.error, 'unknownStation', 'only configured stations');
+  assert.equal((await call('POST', '/api/radio', { cookie, body: { station: null } })).json.ok, true);
+  assert.equal(player.radio, null);
 });
 
 test('behind a trusted proxy, the login limit is per client, not per proxy', async () => {

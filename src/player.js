@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 import { AUDIO_FORMAT } from './prefetch.js';
 import { MAX_FILESIZE, baseArgs, isGlobalError, summarizeError, ytdlpEvents } from './ytdlp.js';
 import { OpusStream, opusOutputArgs } from './voice/opus.js';
+import { openStation, USER_AGENT } from './radio.js';
 
 const execFileAsync = promisify(execFile);
 const STDERR_TAIL = 4096;
@@ -20,6 +21,9 @@ const LIVE_FORMAT = 'bestaudio/best[height<=360]/worst'; // live streams are usu
 const LIMITER = 'alimiter=limit=0.89:level=false'; // about -1 dBFS, no auto-gain
 const LOUDNORM = 'loudnorm=I=-16:TP=-1.5:LRA=11';
 const METRICS_KEPT = 100;
+// Before reconnecting to a radio station whose stream ended: longer if it barely played.
+const RADIO_RETRY_MS = { quick: 10_000, normal: 2_000 };
+const RADIO_SHORT_RUN_MS = 30_000;
 
 /** After this many tracks in a row fail before producing audio, stop instead of draining the queue. */
 export const MAX_CONSECUTIVE_FAILURES = 3;
@@ -86,6 +90,10 @@ const pushMetric = (list, value) => {
  */
 export class Player extends EventEmitter {
   #lookups = new Map(); // Spotify song -> YouTube lookup (promise)
+  #radioTimer = null;
+  #pendingAbort = null;
+  /** The radio station ({ name, url }) that plays whenever the queue is empty, or null. */
+  radio = null;
   queue = [];
   current = null;
   loop = 'off';
@@ -145,8 +153,35 @@ export class Player extends EventEmitter {
     if (front) this.queue.unshift(...fresh);
     else this.queue.push(...fresh);
     if (this.halted) this.#clearHalt(); // someone asked for music: try again
+    if (this.current?.radio) {
+      // Requests win over the radio, which comes back once the queue is empty.
+      this.#killProcs();
+      this.current = null;
+    }
     if (!this.current) this.#playNext();
     else this.#syncPrefetch();
+  }
+
+  /**
+   * Sets the radio station that plays whenever the queue is empty (null turns it off).
+   * Starts it now if nothing else is playing, or switches stations if the radio is on.
+   */
+  setRadio(station) {
+    this.radio = station ? { name: station.name, url: station.url } : null;
+    if (this.current?.radio) {
+      this.#killProcs();
+      this.current = null;
+      this.paused = false;
+      if (!this.radio && this.queue.length === 0) {
+        this.#cancelRadioRetry();
+        this.emit('idle');
+        return;
+      }
+    }
+    if (!this.current && this.radio) {
+      this.#clearHalt();
+      this.#playNext();
+    }
   }
 
   /** Removes the n-th queued track (1-based); returns it or null. */
@@ -175,11 +210,12 @@ export class Player extends EventEmitter {
 
   /** Starts the queue if nothing is playing (e.g. after restoring state). */
   start() {
-    if (!this.current && !this.halted && this.queue.length > 0) this.#playNext();
+    if (!this.current && !this.halted && (this.queue.length > 0 || this.radio)) this.#playNext();
   }
 
   skip() {
     if (!this.current) return false;
+    if (this.current.radio && this.queue.length === 0) return false; // nothing to skip to
     this.#killProcs();
     this.#advance({ skipped: true });
     return true;
@@ -188,6 +224,8 @@ export class Player extends EventEmitter {
   stop() {
     const wasActive = this.current !== null;
     this.queue = [];
+    this.radio = null; // "stop" means silence, radio included
+    this.#cancelRadioRetry();
     this.#killProcs();
     this.current = null;
     this.paused = false;
@@ -204,6 +242,12 @@ export class Player extends EventEmitter {
 
   pause() {
     if (!this.current || this.paused || !this.#procs) return false;
+    if (this.current.radio) {
+      // A live stream can't wait: hang up, and reconnect on resume.
+      this.#killProcs();
+      this.paused = true;
+      return true;
+    }
     this.#procs.ff.kill('SIGSTOP');
     this.#procs.stream?.pause();
     this.paused = true;
@@ -213,9 +257,14 @@ export class Player extends EventEmitter {
   /** Resumes a paused track, or starts a queue that is halted or wasn't started yet. */
   resume() {
     if (!this.current) {
-      if (this.queue.length === 0) return false;
+      if (this.queue.length === 0 && !this.radio) return false;
       this.#clearHalt();
       this.#playNext();
+      return true;
+    }
+    if (this.current.radio && this.paused) {
+      this.paused = false;
+      this.#load(this.current, 0);
       return true;
     }
     if (!this.paused || !this.#procs) return false;
@@ -236,7 +285,9 @@ export class Player extends EventEmitter {
   snapshot() {
     return {
       queue: this.queue.map(plainTrack),
-      current: this.current ? { ...plainTrack(this.current), startAt: undefined, position: this.elapsed() } : null,
+      // The radio isn't a queue entry: it comes back through `radio`.
+      current: this.current && !this.current.radio ? { ...plainTrack(this.current), startAt: undefined, position: this.elapsed() } : null,
+      radio: this.radio,
       loop: this.loop,
       volume: this.volume,
       paused: this.paused || this.halted,
@@ -253,7 +304,11 @@ export class Player extends EventEmitter {
     this.queue = [...resumeFrom, ...(state.queue ?? []).map(plainTrack)].filter(valid);
     if (LOOP_MODES.includes(state.loop)) this.loop = state.loop;
     if (Number.isFinite(state.volume)) this.volume = Math.max(0, Math.min(100, state.volume));
-    return { tracks: this.queue.length, paused: Boolean(state.paused) };
+    const radio = state.radio;
+    if (radio && typeof radio.name === 'string' && typeof radio.url === 'string' && /^https?:\/\//i.test(radio.url)) {
+      this.radio = { name: radio.name, url: radio.url };
+    }
+    return { tracks: this.queue.length, paused: Boolean(state.paused), radio: Boolean(this.radio) };
   }
 
   // --- internals -------------------------------------------------------------------
@@ -293,6 +348,14 @@ export class Player extends EventEmitter {
   }
 
   #playNext() {
+    this.#cancelRadioRetry();
+    if (this.queue.length === 0 && this.radio && !this.halted) {
+      const { name, url } = this.radio;
+      this.current = { title: name, url, duration: null, isLive: true, radio: true, position: 0, retries: 0, requestedAt: Date.now() };
+      this.paused = false;
+      this.#load(this.current, 0);
+      return;
+    }
     const next = this.queue.shift();
     if (!next) {
       this.current = null;
@@ -311,6 +374,32 @@ export class Player extends EventEmitter {
     const session = ++this.#session;
     this.#syncPrefetch();
     this.log.info(`loading: ${track.title} <${track.url}>`);
+    if (track.radio) {
+      const abort = new AbortController();
+      this.#pendingAbort = abort;
+      let input;
+      try {
+        input = await openStation(track.url, {
+          signal: abort.signal,
+          onTitle: (title) => {
+            track.streamTitle = title;
+            this.log.debug(`radio title: ${title}`);
+            this.emit('streamTitle', track, title);
+          },
+        });
+      } catch (err) {
+        if (session === this.#session) this.#advance({ error: err.message });
+        return;
+      } finally {
+        if (this.#pendingAbort === abort) this.#pendingAbort = null;
+      }
+      if (session !== this.#session) {
+        abort.abort();
+        return;
+      }
+      this.#spawn(track, session, 0, null, { ...input, abort });
+      return;
+    }
     if (track.search) {
       let found;
       try {
@@ -343,6 +432,32 @@ export class Player extends EventEmitter {
     const finished = this.current;
     this.current = null;
     this.#lastEndAt = Date.now();
+    if (finished?.radio) {
+      if (error) {
+        this.#failures++;
+        if (global || this.#failures >= MAX_CONSECUTIVE_FAILURES) {
+          this.halted = true;
+          this.paused = false;
+          this.log.warn(`radio halted after ${this.#failures} failure(s): ${error}`);
+          this.emit('halted', finished, error);
+          this.emit('idle');
+          return;
+        }
+        this.emit('trackError', finished, error);
+      }
+      if (this.queue.length === 0 && this.radio) {
+        // The stream ended or dropped: reconnect after a moment, longer if it barely played.
+        const quick = error || Date.now() - finished.requestedAt < RADIO_SHORT_RUN_MS;
+        this.#radioTimer = setTimeout(() => {
+          this.#radioTimer = null;
+          if (!this.current && !this.halted) this.#playNext();
+        }, quick ? RADIO_RETRY_MS.quick : RADIO_RETRY_MS.normal);
+        this.#radioTimer.unref?.();
+        return;
+      }
+      this.#playNext();
+      return;
+    }
     if (finished) {
       const track = plainTrack(finished);
       if (error) {
@@ -368,7 +483,7 @@ export class Player extends EventEmitter {
     this.#playNext();
   }
 
-  #spawn(track, session, startAt, source) {
+  #spawn(track, session, startAt, source, station = null) {
     const mode = source ? 'file' : 'stream';
     const seek = startAt > 0 ? ['-ss', String(startAt)] : [];
     const opus = this.output.kind === 'opus';
@@ -387,6 +502,18 @@ export class Player extends EventEmitter {
     if (source) {
       ff = spawn(this.bin.ffmpeg, ['-hide_banner', '-loglevel', 'error', '-nostdin', ...seek, '-i', source.file,
         '-vn', ...filters, ...output], { stdio: ['ignore', ffOut, 'pipe', 'pipe'] });
+    } else if (station) {
+      // Radio: our own connection (for the song titles) piped in, or ffmpeg reads the address.
+      const input = station.audio ? ['-i', 'pipe:0']
+        : ['-user_agent', USER_AGENT, '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5', '-i', station.url];
+      ff = spawn(this.bin.ffmpeg, ['-hide_banner', '-loglevel', 'error', ...input, '-vn', ...filters, ...output],
+        { stdio: [station.audio ? 'pipe' : 'ignore', ffOut, 'pipe', 'pipe'] });
+      if (station.audio) {
+        // A dropped connection ends ffmpeg's input, so the track ends and the radio reconnects.
+        station.audio.on('error', () => ff.stdin.end());
+        ff.stdin.on('error', () => {});
+        station.audio.pipe(ff.stdin);
+      }
     } else {
       yt = spawn(this.bin.ytdlp, [
         ...baseArgs(this.ytOpts),
@@ -405,7 +532,7 @@ export class Player extends EventEmitter {
       ff.stdin.on('error', () => {});
     }
 
-    const procs = { yt, ff, mode, started: false, stalled: false, spawnedAt: Date.now(), lastProgressAt: Date.now() };
+    const procs = { yt, ff, mode, station, started: false, stalled: false, spawnedAt: Date.now(), lastProgressAt: Date.now() };
     if (opus) procs.stream = new OpusStream(ff.stdout, { ...this.output, log: this.log });
     this.#procs = procs;
     let ytErr = '';
@@ -537,6 +664,7 @@ export class Player extends EventEmitter {
   /** How far a track may play before it is stopped: its length plus slack, capped by MAX_TRACK_DURATION. */
   #maxPosition(track) {
     const limits = [];
+    if (track.radio) return Infinity; // the radio is meant to play on
     if (!track.isLive && Number.isFinite(track.duration) && track.duration > 0) limits.push(track.duration + this.timing.overrunSlackS);
     if (this.maxTrackDuration > 0) limits.push(this.maxTrackDuration);
     return limits.length ? Math.min(...limits) : Infinity;
@@ -544,12 +672,21 @@ export class Player extends EventEmitter {
 
   #killPipeline(procs) {
     procs.stream?.stop();
+    procs.station?.abort.abort(); // hang up on the radio station
+    procs.station?.audio?.destroy();
     if (isRunning(procs.ff)) procs.ff.kill('SIGKILL'); // works on SIGSTOP'ed (paused) ffmpeg too
     if (procs.yt && isRunning(procs.yt)) killProcessGroup(procs.yt);
   }
 
+  #cancelRadioRetry() {
+    clearTimeout(this.#radioTimer);
+    this.#radioTimer = null;
+  }
+
   #killProcs() {
     this.#session++;
+    this.#pendingAbort?.abort(); // a radio station still being connected to
+    this.#pendingAbort = null;
     const procs = this.#procs;
     this.#procs = null;
     if (!procs) return;

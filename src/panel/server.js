@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { LOOP_MODES } from '../player.js';
 import { logEvents, recentLogs } from '../log.js';
 import { mayManage, roleFor } from '../roles.js';
+import { findStation } from '../radio.js';
 
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public');
 const TYPES = {
@@ -32,7 +33,7 @@ const sha256 = (s) => crypto.createHash('sha256').update(String(s)).digest();
 const safeEqual = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
 // Playback controls that affect everyone; listeners may only request, and skip or remove their own songs.
-const ADMIN_ROUTES = new Set(['/api/stop', '/api/pause', '/api/resume', '/api/clear', '/api/shuffle', '/api/loop', '/api/volume']);
+const ADMIN_ROUTES = new Set(['/api/stop', '/api/pause', '/api/resume', '/api/clear', '/api/shuffle', '/api/loop', '/api/volume', '/api/radio']);
 
 /** Reads a secret from `file`, or creates one there (readable only by us). Returns [value, created]. */
 function secretFile(file, make) {
@@ -109,7 +110,7 @@ export class PanelServer {
     }
 
     const push = () => this.#pushState();
-    for (const e of ['trackStart', 'trackError', 'halted', 'idle']) this.bot.player.on(e, push);
+    for (const e of ['trackStart', 'trackError', 'halted', 'idle', 'streamTitle']) this.bot.player.on(e, push);
     for (const e of ['connected', 'disconnected', 'moved']) this.bot.voice.on(e, push);
     logEvents.on('line', this.#onLog);
     this.#timer = setInterval(push, STATE_TICK_MS);
@@ -141,8 +142,14 @@ export class PanelServer {
       channel: voice.me.cid,
       channelName: voice.connected ? this.bot.channelName ?? null : null,
       disconnectedSince: voice.disconnectedSince,
-      current: player.current ? { ...track(player.current), position: Math.floor(player.current.position ?? 0) } : null,
+      current: player.current ? {
+        ...track(player.current), position: Math.floor(player.current.position ?? 0),
+        radio: Boolean(player.current.radio), streamTitle: player.current.streamTitle ?? null,
+      } : null,
       paused: player.paused,
+      waiting: Boolean(this.bot.waitingForListeners), // paused until someone joins the channel
+      radio: player.radio ? { name: player.radio.name, url: player.radio.url } : null,
+      stations: (config.radio?.stations ?? []).map((s) => s.name),
       halted: player.halted,
       queue: player.queue.map(track),
       loop: player.loop,
@@ -327,6 +334,18 @@ export class PanelServer {
         if (body.url && player.queue[index - 1].url !== body.url) return fail('queueChanged', 409);
         if (!mayManage(user, player.queue[index - 1])) return fail('notYours', 403);
         player.remove(index);
+        return ok();
+      }
+      case '/api/radio': {
+        // Stations from RADIO_STATIONS only; other addresses go through chat (!radio <link>).
+        if (body.station == null || body.station === '') {
+          player.setRadio(null);
+          return ok();
+        }
+        const stations = this.bot.config.radio?.stations ?? [];
+        const station = findStation(stations, String(body.station));
+        if (!station || !stations.includes(station)) return fail('unknownStation');
+        player.setRadio(station);
         return ok();
       }
       case '/api/loop':

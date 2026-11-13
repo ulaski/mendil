@@ -77,6 +77,20 @@ export default {
   joinFailed: "Couldn't join your channel: {reason}",
   clientNotFound: "couldn't find you",
 
+  // radio
+  radioOn: '📻 Radio: {station}',
+  radioNow: '📻 {station}: {title}',
+  radioStatus: '📻 The radio is on: {station}. It plays whenever the queue is empty.',
+  radioIsOff: 'The radio is off.',
+  radioStations: 'Stations: {stations}. {prefix}radio <name or link> switches, {prefix}radio off turns it off.',
+  radioNoStations: 'No stations are set up (RADIO_STATIONS). {prefix}radio <link> plays a station by its stream address.',
+  radioUnknown: 'There is no station called "{name}". Stations: {stations}',
+  radioSet: '📻 Radio on: {station}. It plays whenever the queue is empty.',
+  radioSetLater: '📻 Radio set to {station}. It starts when the queue is empty.',
+  radioTurnedOff: 'Radio turned off.',
+  radioSkip: 'Only the radio is playing. {prefix}radio off turns it off.',
+  radioOffWords: [],
+
   // help
   commandsTitle: 'Commands:',
   help: {
@@ -95,6 +109,7 @@ export default {
     shuffle: 'Shuffle the queue',
     loop: 'Loop mode: off / track / queue',
     vol: 'Show or set the volume',
+    radio: 'Radio for when the queue is empty: show it, pick a station, or turn it off',
     join: 'Move the bot to your channel',
     whoami: 'Show your unique ID and server groups (for access control)',
     help: 'This list',
@@ -107,6 +122,7 @@ export default {
     remove: '<number>',
     loop: '[off|one|all]',
     vol: '[0-100]',
+    radio: '[name | link | off]',
   },
 
   // extra command names / loop mode names for this language (English ones always work)

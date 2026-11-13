@@ -3,6 +3,8 @@ import { YOUTUBE_DOCS_URL } from './ytdlp.js';
 import { createRequests } from './requests.js';
 import { formatDuration, safe, trackLink } from './format.js';
 import { mayManage, ROLE_RANK } from './roles.js';
+import { findStation } from './radio.js';
+import { BlockedUrlError, UrlGuard } from './netguard.js';
 
 const LOOP_ALIASES = { off: 'off', one: 'one', track: 'one', all: 'all', queue: 'all' };
 
@@ -20,6 +22,8 @@ export function createCommands(bot) {
   const searchResults = new Map(); // invokerUid -> tracks
 
   const length = (track) => (track.isLive ? t('live') : formatDuration(track.duration));
+  const urlGuard = new UrlGuard({ allowPrivate: config.player.allowPrivateUrls });
+  const stationList = () => config.radio.stations.map((s) => s.name).join(', ');
 
   const requests = createRequests(bot);
 
@@ -107,6 +111,7 @@ export function createCommands(bot) {
       role: 'listener',
       run: async (ctx) => {
         if (!player.current) return ctx.reply(t('nothingPlaying'));
+        if (player.current.radio && player.queue.length === 0) return ctx.reply(t('radioSkip'));
         if (!mayManage(ctx.user, player.current)) return ctx.reply(t('notYours'));
         // reply first so it shows up before the next track's announcement
         await ctx.reply(t('skipped', { title: safe(player.current.title) }));
@@ -146,6 +151,7 @@ export function createCommands(bot) {
       run: (ctx) => {
         const tr = player.current;
         if (!tr) return ctx.reply(t('nothingPlaying'));
+        if (tr.radio) return ctx.reply(t('radioNow', { station: trackLink(tr), title: safe(tr.streamTitle ?? '-') }));
         return ctx.reply(
           t('nowPlayingDetail', {
             track: trackLink(tr),
@@ -231,6 +237,37 @@ export function createCommands(bot) {
         if (!Number.isInteger(n) || n < 0 || n > 100) return ctx.reply(t('volumeRange'));
         await player.setVolume(n);
         return ctx.reply(t('volume', { volume: player.volume }));
+      },
+    },
+    {
+      names: ['radio'],
+      role: 'listener',
+      run: async (ctx, arg) => {
+        const list = stationList();
+        if (!arg) {
+          const lines = [player.radio ? t('radioStatus', { station: safe(player.radio.name) }) : t('radioIsOff')];
+          lines.push(list ? t('radioStations', { stations: safe(list) }) : t('radioNoStations'));
+          return ctx.reply(lines.join('\n'));
+        }
+        if (ctx.user.role !== 'admin') return ctx.reply(t('adminOnly')); // listeners may only look
+        if (['off', ...(i18n.radioOffWords ?? [])].includes(arg.toLowerCase())) {
+          player.setRadio(null);
+          return ctx.reply(t('radioTurnedOff'));
+        }
+        const station = findStation(config.radio.stations, arg);
+        if (!station) return ctx.reply(list ? t('radioUnknown', { name: safe(arg), stations: safe(list) }) : t('radioNoStations'));
+        if (!config.radio.stations.includes(station)) {
+          // A station by address, from chat: the same private-network rule as !play.
+          try {
+            await urlGuard.assertAllowed(station.url);
+          } catch (err) {
+            if (err instanceof BlockedUrlError || err.blockedUrl) return ctx.reply(t('blockedUrl'));
+            return ctx.reply(t('notFound', { reason: safe(err.message) }));
+          }
+        }
+        const waits = player.isPlaying && !player.current?.radio;
+        player.setRadio(station);
+        return ctx.reply(t(waits ? 'radioSetLater' : 'radioSet', { station: safe(station.name) }));
       },
     },
     {

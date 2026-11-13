@@ -21,6 +21,8 @@ class FakeVoice extends EventEmitter {
   transmitting = [];
   channel = { codec: 5, quality: 10, neededTalkPower: 0, talkPower: 0, isTalker: false };
   groups = { 7: ['6', '8'] };
+  listeners = 1;
+  async listenerCount() { return this.connected ? this.listeners : null; }
   async start() {}
   async tick() {}
   async stop() {}
@@ -39,18 +41,19 @@ class FakeVoice extends EventEmitter {
   }
 }
 
-function makeBot({ bot: botOpts = {}, voice = new FakeVoice() } = {}) {
+function makeBot({ bot: botOpts = {}, voice = new FakeVoice(), timing } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mendil-bot-'));
   const config = {
     dataDir: dir,
     voice: { backend: 'native', bitrate: 128 },
     ts3: { host: 'ts.example', port: 9987, nickname: 'Mendil', channel: '', serverPassword: '', channelPassword: '' },
-    bot: { language: 'en', prefix: '!', allowedUids: [], allowedGroups: [], adminUids: [], adminGroups: [], channelHints: true, announceTracks: true, ...botOpts },
+    bot: { language: 'en', prefix: '!', allowedUids: [], allowedGroups: [], adminUids: [], adminGroups: [], channelHints: true, announceTracks: true, pauseWhenAlone: true, ...botOpts },
+    radio: { stations: [{ name: 'Test FM', url: 'https://radio.example/live' }], default: '' },
     player: { sink: 'x', defaultVolume: 70, normalize: false, maxQueue: 100, maxPlaylistItems: 50, maxTrackDuration: 0,
       cookiesFile: '', proxy: '', cacheDir: dir, prefetch: false, prefetchDir: path.join(dir, 'cache'), prefetchMaxDuration: 1800, allowPrivateUrls: false },
     ytdlp: { autoUpdate: false, venv: dir },
   };
-  const bot = new Bot(config, quietLog, { backend: voice });
+  const bot = new Bot(config, quietLog, { backend: voice, timing });
   return { bot, voice };
 }
 
@@ -188,4 +191,68 @@ test('messages are not sent while disconnected', async () => {
   const { bot, voice } = makeBot();
   await bot.sendChannel('nobody hears this');
   assert.equal(voice.sent.length, 0);
+});
+
+test('PAUSE_WHEN_ALONE: pauses once the channel stays empty, resumes when someone joins', async () => {
+  const { bot, voice } = makeBot({ timing: { aloneCheckMs: 20, aloneGraceMs: 150 } });
+  const player = bot.player;
+  const calls = [];
+  player.current = { title: 'Song', url: 'https://x' };
+  player.pause = () => { calls.push('pause'); player.paused = true; return true; };
+  player.resume = () => { calls.push('resume'); player.paused = false; return true; };
+  await bot.start();
+  voice.connect();
+  try {
+    await sleep(250);
+    assert.deepEqual(calls, [], 'someone is listening');
+    voice.listeners = 0;
+    await sleep(60);
+    assert.deepEqual(calls, [], 'a short absence is ignored');
+    await sleep(250);
+    assert.deepEqual(calls, ['pause']);
+    assert.equal(bot.waitingForListeners, true);
+    assert.equal(voice.transmitting.at(-1), false);
+
+    voice.listeners = 2;
+    await sleep(80);
+    assert.deepEqual(calls, ['pause', 'resume']);
+    assert.equal(voice.transmitting.at(-1), true);
+
+    // Resumed by hand while nobody is there: it stays playing until people come and go again.
+    voice.listeners = 0;
+    await sleep(300);
+    assert.deepEqual(calls, ['pause', 'resume', 'pause']);
+    player.resume();
+    await sleep(300);
+    assert.deepEqual(calls, ['pause', 'resume', 'pause', 'resume']);
+    assert.equal(player.paused, false);
+  } finally {
+    player.current = null;
+    await bot.shutdown();
+  }
+});
+
+test('!radio: listeners see the stations, admins switch and turn it off', async () => {
+  const { bot, voice } = makeBot({ bot: { adminUids: ['uid-9'] } });
+  const set = [];
+  bot.player.setRadio = (station) => { set.push(station?.name ?? null); bot.player.radio = station; };
+  voice.connect();
+  voice.say('!radio');
+  await sentCount(voice, 1);
+  assert.match(voice.sent[0].chunk, /radio is off[\s\S]*Test FM/);
+  voice.say('!radio test fm');
+  await sentCount(voice, 2);
+  assert.match(voice.sent[1].chunk, /Only admins/);
+  voice.say('!radio test fm', { clid: '9' });
+  await sentCount(voice, 3);
+  assert.match(voice.sent[2].chunk, /Radio on: Test FM/);
+  voice.say('!radio jazz', { clid: '9' });
+  await sentCount(voice, 4);
+  assert.match(voice.sent[3].chunk, /no station called "jazz"/);
+  voice.say('!radio http://127.0.0.1/stream', { clid: '9' });
+  await sentCount(voice, 5);
+  assert.match(voice.sent[4].chunk, /private network/);
+  voice.say('!radio off', { clid: '9' });
+  await sentCount(voice, 6);
+  assert.deepEqual(set, ['Test FM', null]);
 });
