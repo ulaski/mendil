@@ -5,8 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-13
+
+A web panel, and a second, experimental voice engine that works without the TeamSpeak client.
+
 ### Added
-- **Web panel** on port 8080: what's playing with progress, pause, skip, stop, volume and loop; request songs by link or search; the queue with remove, shuffle and clear; and the live log. Works on phones, in light and dark mode, in English and Turkish. Protected by a password (`PANEL_PASSWORD`, or generated on first start). See README "Web panel".
+- **Web panel** on port 8080, laid out like a radio station's running order:
+  - The current track sits under an ON AIR lamp, with the time left.
+  - Every queued song shows when it will air, and the panel shows when the queue ends.
+  - From the panel you can pause, skip, stop, change the volume and the loop mode, request songs by link or search, remove, shuffle and clear the queue, and read the live log.
+  - It works on phones, in light and dark mode, and in English and Turkish.
+  - It is protected by a password (`PANEL_PASSWORD`, or generated on first start). `PANEL_TRUST_PROXY` is for running it behind a reverse proxy. See README "Web panel".
 - **Native engine (experimental):** `VOICE_BACKEND=native` connects to TeamSpeak without the official client, through [teamspeak-js](https://github.com/HoneyBBQ/teamspeak-js). It runs on x86_64 and ARM64 (`ghcr.io/ulaski/mendil:native`), uses about a quarter of the memory, plays music in stereo in any channel (no Opus Music codec needed), and logs why a server refused it (wrong password, ban, security level). It raises its identity's security level when a server asks for more. Classic stays the default.
 - `NATIVE_BITRATE` sets the native engine's Opus bitrate.
 - CI tests the native engine end to end against TeamSpeak 3 and TeamSpeak 6 servers.
@@ -69,6 +78,7 @@ First public version of 🧻 Mendil.
 - A `stats:` log line every 10 minutes, and `/tmp/mendil-health.json` with connection details.
 - English and Turkish chat messages (`BOT_LANGUAGE`). Adding a language means translating one file.
 
-[Unreleased]: https://github.com/ulaski/mendil/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/ulaski/mendil/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/ulaski/mendil/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/ulaski/mendil/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/ulaski/mendil/releases/tag/v0.1.0
