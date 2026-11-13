@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-13
+
 ### Fixed
 - **Classic:** after a container restart (`docker restart`, or Docker restarting it after an error), PulseAudio didn't start and Mendil exited again with "PulseAudio did not start". A stale pid file from the previous run made PulseAudio think it was already running.
 - Times in chat such as "1:05" showed an emoticon in the TeamSpeak 3 client, which turns ":0" into a face. Mendil now puts an invisible joiner after the colon.
@@ -124,7 +126,8 @@ First public version of 🧻 Mendil.
 - A `stats:` log line every 10 minutes, and `/tmp/mendil-health.json` with connection details.
 - English and Turkish chat messages (`BOT_LANGUAGE`). Adding a language means translating one file.
 
-[Unreleased]: https://github.com/ulaski/mendil/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/ulaski/mendil/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/ulaski/mendil/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/ulaski/mendil/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/ulaski/mendil/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ulaski/mendil/compare/v0.3.0...v0.4.0
