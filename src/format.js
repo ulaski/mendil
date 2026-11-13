@@ -1,10 +1,17 @@
+/**
+ * The TeamSpeak 3 client turns ":0" into an emoticon, so "1:05" would show a face. An
+ * invisible WORD JOINER after each colon keeps chat times intact.
+ */
+export const CHAT_COLON = ':\u2060';
+
+/** "3:52" or "1:02:03" for chat (see CHAT_COLON); "?" when unknown. */
 export function formatDuration(seconds) {
   if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return '?';
   const s = Math.max(0, Math.floor(seconds));
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = String(s % 60).padStart(2, '0');
-  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
+  return (h > 0 ? [h, String(m).padStart(2, '0'), sec] : [m, sec]).join(CHAT_COLON);
 }
 
 /** Keeps BBCode intact by replacing square brackets in user/remote supplied text. */
@@ -25,6 +32,7 @@ export function trackLink(track) {
  */
 export function stripBBCode(text) {
   return text
+    .replace(/\u2060/g, '') // our own invisible joiners, if a time was copied from chat
     .replace(/\[url=([^\]]+)\][^[]*\[\/url\]/gi, '$1')
     .replace(/\[url\]([^[]*)\[\/url\]/gi, '$1')
     .replace(/\[\/?[a-z]+(=[^\]]*)?\]/gi, '')

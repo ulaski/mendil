@@ -272,7 +272,7 @@ test('!seek: your own song (admins: any); !move: admins only', async () => {
   player.current = { title: 'Mine', url: 'https://m', duration: 200, requesterUid: 'uid-7', position: 10 };
   voice.say('!seek +30');
   await sentCount(voice, 2);
-  assert.equal(voice.sent[1].chunk, 'Jumped to 0:40 of 3:20.');
+  assert.equal(voice.sent[1].chunk.replace(/\u2060/g, ''), 'Jumped to 0:40 of 3:20.');
   voice.say('!move 2 1');
   await sentCount(voice, 3);
   assert.match(voice.sent[2].chunk, /Only admins/);

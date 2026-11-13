@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+- **Classic:** after a container restart (`docker restart`, or Docker restarting it after an error), PulseAudio didn't start and Mendil exited again with "PulseAudio did not start". A stale pid file from the previous run made PulseAudio think it was already running.
+- Times in chat such as "1:05" showed an emoticon in the TeamSpeak 3 client, which turns ":0" into a face. Mendil now puts an invisible joiner after the colon.
+
+### Added
+- A demo GIF in the README.
+
 ## [0.6.0] - 2026-11-13
 
 Seek and move, and a limit on songs per person.

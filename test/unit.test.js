@@ -32,10 +32,13 @@ test('stripBBCode unwraps TeamSpeak links', () => {
   assert.equal(stripBBCode('[b]play[/b] daft punk'), 'play daft punk');
 });
 
-test('formatDuration', () => {
-  assert.equal(formatDuration(5), '0:05');
-  assert.equal(formatDuration(242), '4:02');
-  assert.equal(formatDuration(3725), '1:02:05');
+test('formatDuration (with an invisible joiner after each colon, against TS3 emoticons)', () => {
+  const plain = (d) => formatDuration(d).replace(/\u2060/g, '');
+  assert.equal(plain(5), '0:05');
+  assert.equal(plain(242), '4:02');
+  assert.equal(plain(3725), '1:02:05');
+  assert.ok(!/:0/.test(formatDuration(5)), 'no ":0" for the client to turn into a face');
+  assert.equal(stripBBCode(`!seek ${formatDuration(65)}`), '!seek 1:05');
   assert.equal(formatDuration(null), '?');
 });
 

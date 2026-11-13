@@ -14,10 +14,10 @@ Write a song in chat and Mendil plays it in your channel.
 
 </div>
 
-```
-<you>     !play fontaines dc mimesis
-Mendil    ▶ Now playing: Fontaines D.C. - Mimesis (3:52) — requested by you
-```
+<p align="center">
+  <img src="docs/assets/demo.gif" width="800" alt="The TeamSpeak 3 client: Deniz types !play fontaines d.c. mimesis in the channel chat, Mendil answers &quot;Now playing: Fontaines D.C. - Mimesis (Lyric Video) (3:52), requested by Deniz&quot; and starts talking; then !np shows 0:11 / 3:52.">
+  <br><sub>Recorded in the TeamSpeak 3 client. The few seconds while the song downloads are sped up.</sub>
+</p>
 
 ### Why "Mendil"?
 
