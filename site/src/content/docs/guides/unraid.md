@@ -1,13 +1,23 @@
 ---
 title: "Unraid"
-description: "Install Mendil on Unraid with a template, with its data in appdata."
+description: "Install Mendil on Unraid from Community Applications, with its data in appdata."
 ---
 
 There are two templates: **Mendil** runs the Classic engine (the official TeamSpeak 3 client), and **Mendil-Native** runs the experimental native engine, which needs about 80 MB of RAM and no TeamSpeak client download.
 
 ## Install
 
-Until the templates are in Community Applications, add one by hand. In the Unraid terminal:
+Open the **Apps** tab, search for **Mendil**, and install **Mendil** or **Mendil-Native**. The template opens with these to fill in:
+
+- **TeamSpeak server**: your server's address. If TeamSpeak runs on this Unraid server too, use the server's IP.
+- **Accept the TeamSpeak client license** (Classic only): type `accept` after reading the [license](https://www.teamspeak.com/en/privacy-and-terms/). Mendil downloads the client on first start.
+- **Server password**, if your server has one.
+
+Click **Apply**. The log shows `connected to server` once Mendil has joined. Then join its channel and type `!help`.
+
+### Without Community Applications
+
+If the Apps tab isn't installed, or you want the template straight from the repository, add it by hand in the Unraid terminal:
 
 ```bash
 # Classic
@@ -19,13 +29,7 @@ wget -O /boot/config/plugins/dockerMan/templates-user/my-Mendil-Native.xml \
   https://raw.githubusercontent.com/ulaski/mendil/main/examples/unraid/mendil-native.xml
 ```
 
-Then open **Docker → Add Container**, pick the template, and fill in:
-
-- **TeamSpeak server**: your server's address. If TeamSpeak runs on this Unraid server too, use the server's IP.
-- **Accept the TeamSpeak client license** (Classic only): type `accept` after reading the [license](https://www.teamspeak.com/en/privacy-and-terms/). Mendil downloads the client on first start.
-- **Server password**, if your server has one.
-
-Click **Apply**. The log shows `connected to server` once Mendil has joined. Then join its channel and type `!help`.
+Then open **Docker → Add Container**, pick the template, and fill it in as above.
 
 ## Web panel
 

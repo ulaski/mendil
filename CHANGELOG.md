@@ -5,6 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+- Mendil and Mendil-Native are in Unraid Community Applications: the Unraid guide now installs them from the Apps tab, and adding the template by hand stays as a fallback.
+
 ## [0.7.1] - 2026-11-13
 
 ### Fixed
