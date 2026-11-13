@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<CommunityApplications>
+  <Profile>Templates for **Mendil**, a self-hosted music bot for TeamSpeak 3 and 6 servers. People type `!play` with a song, a YouTube link or a Spotify link in the channel chat, and Mendil plays it in the voice channel.
+
+- **Mendil** runs the Classic engine: the official TeamSpeak 3 client, headless in the container.
+- **Mendil-Native** runs the experimental native engine, which speaks the TeamSpeak protocol itself and needs no TeamSpeak client.
+
+Setup guide: https://ulaski.github.io/mendil/guides/unraid/
+Bugs and questions: https://github.com/ulaski/mendil/issues</Profile>
+  <Icon>https://raw.githubusercontent.com/ulaski/mendil/main/docs/assets/icon.png</Icon>
+  <WebPage>https://ulaski.github.io/mendil/</WebPage>
+</CommunityApplications>
