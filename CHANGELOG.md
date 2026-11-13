@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-13
+
+Spotify links.
+
 ### Added
 - **Spotify links.** `!play` and the panel take Spotify song, album and playlist links (also `spotify.link` short links). Mendil reads the song list from Spotify's public embed page, without an account or API key, and plays each song from YouTube, choosing the result whose length matches Spotify's. Songs are looked up just before they play, the next one ahead of time, so a playlist joins the queue at once and songs still follow each other without a gap.
 
@@ -96,7 +100,8 @@ First public version of 🧻 Mendil.
 - A `stats:` log line every 10 minutes, and `/tmp/mendil-health.json` with connection details.
 - English and Turkish chat messages (`BOT_LANGUAGE`). Adding a language means translating one file.
 
-[Unreleased]: https://github.com/ulaski/mendil/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/ulaski/mendil/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/ulaski/mendil/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ulaski/mendil/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ulaski/mendil/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/ulaski/mendil/compare/v0.1.0...v0.1.1
