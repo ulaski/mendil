@@ -23,6 +23,8 @@ for (const p of pages) {
   const frontmatter = `---\ntitle: ${JSON.stringify(p.title)}\ndescription: ${JSON.stringify(p.description)}\neditUrl: ${GH.replace('/blob/', '/edit/')}${p.from}\n---\n\n`;
   fs.writeFileSync(path.join(out, p.to), frontmatter + text);
 }
+// The assets folder holds only these copies, so a fresh clone doesn't have it yet.
+fs.mkdirSync(path.join(site, 'src/assets'), { recursive: true });
 for (const asset of ['logo.png', 'demo.gif']) {
   fs.copyFileSync(path.join(repo, 'docs/assets', asset), path.join(site, 'src/assets', asset));
 }
