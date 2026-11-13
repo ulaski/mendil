@@ -1,6 +1,8 @@
-# Publishes the Docker image to GitHub Container Registry when a version tag is pushed:
-#   git tag v0.1.0 && git push origin v0.1.0
-# The image does not contain the TeamSpeak client (it is downloaded at runtime).
+# Publishes the Docker images to GitHub Container Registry when a version tag is pushed:
+#   git tag v0.3.0 && git push origin v0.3.0
+#   ghcr.io/ulaski/mendil:<version>|latest                 Classic engine, linux/amd64
+#   ghcr.io/ulaski/mendil:<version>-native|native          Native engine, linux/amd64 + arm64
+# Neither image contains the TeamSpeak client (Classic downloads it at runtime).
 name: Release
 
 on:
@@ -39,5 +41,39 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=classic
+          cache-to: type=gha,mode=max,scope=classic
+
+  native:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          flavor: |
+            latest=false
+            suffix=-native,onlatest=false
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=native,suffix=,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=sha
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: native
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=native
+          cache-to: type=gha,mode=max,scope=native

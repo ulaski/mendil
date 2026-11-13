@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Mendil</title>
+  <link rel="icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" href="/icon.png">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <svg class="sprite" aria-hidden="true">
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8.5 5v14M15.5 5v14"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.8v14.4L19 12z"/></symbol>
+    <symbol id="i-skip" viewBox="0 0 24 24"><path d="M5.5 5.5v13L15 12zM18.5 5.5v13"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></symbol>
+    <symbol id="i-volume" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></symbol>
+    <symbol id="i-remove" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+    <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M4 7h3.5c3 0 4 10 7 10H20M4 17h3.5c1.2 0 2-1.5 2.7-3.3M14.5 7H20M17 4l3 3-3 3M17 14l3 3-3 3"/></symbol>
+    <symbol id="i-clear" viewBox="0 0 24 24"><path d="M5 7h14M10 4h4M7 7l1 13h8l1-13M10.5 11v5.5M13.5 11v5.5"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M15.5 15.5L20 20"/></symbol>
+    <symbol id="i-next" viewBox="0 0 24 24"><path d="M4 7h10M4 12h10M4 17h6M17 14v6M14 17h6"/></symbol>
+    <symbol id="i-add" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-signout" viewBox="0 0 24 24"><path d="M10 5H5.5v14H10M14 8l4 4-4 4M18 12H9"/></symbol>
+  </svg>
+
+  <main id="login" class="login" hidden>
+    <form id="login-form" class="login-panel" autocomplete="on">
+      <img src="/logo.png" alt="" width="88" height="88">
+      <h1>Mendil</h1>
+      <label for="password" data-t="passwordLabel">Panel password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <button type="submit" class="btn primary" data-t="signIn">Sign in</button>
+      <p id="login-error" class="form-error" role="alert"></p>
+      <p class="hint" data-t="passwordHint">The password is in the bot's log on first start, or set it with PANEL_PASSWORD.</p>
+    </form>
+  </main>
+
+  <div id="app" class="app" hidden>
+    <header class="bar">
+      <img src="/logo.png" alt="" width="36" height="36" class="bar-mark">
+      <span class="bar-name" id="nickname">Mendil</span>
+      <p class="bar-status" id="status" aria-live="polite"><span class="dot"></span><span id="status-text"></span></p>
+      <span class="bar-engine" id="engine"></span>
+      <time class="bar-clock" id="clock"></time>
+      <button class="bar-signout" id="logout" type="button"><svg class="icon"><use href="#i-signout"/></svg><span data-t="signOut">Sign out</span></button>
+    </header>
+
+    <section class="onair" aria-labelledby="now-title">
+      <div class="lamp" id="lamp" data-state="off"><span id="lamp-text">OFF AIR</span></div>
+      <img id="thumb" class="thumb" alt="" width="128" height="72" hidden>
+      <div class="now">
+        <h1 class="now-title" id="now-title"><a id="now-link" target="_blank" rel="noopener noreferrer"></a><span id="now-empty" data-t="nothingPlaying">Nothing on air</span></h1>
+        <p class="now-meta"><span id="now-by"></span><span class="now-time" id="now-time"></span><span class="now-left" id="now-left"></span></p>
+        <div class="progress" aria-hidden="true"><span id="progress-bar"></span></div>
+      </div>
+      <div class="transport">
+        <button class="btn primary" id="playpause" type="button"><svg class="icon"><use id="playpause-icon" href="#i-pause"/></svg><span id="playpause-label">Pause</span></button>
+        <button class="btn" id="skip" type="button"><svg class="icon"><use href="#i-skip"/></svg><span data-t="skip">Skip</span></button>
+        <button class="btn" id="stop" type="button"><svg class="icon"><use href="#i-stop"/></svg><span data-t="stop">Stop</span></button>
+        <label class="volume">
+          <svg class="icon" aria-hidden="true"><use href="#i-volume"/></svg>
+          <span class="visually-hidden" data-t="volume">Volume</span>
+          <input type="range" id="volume" min="0" max="100" step="1">
+          <output id="volume-value" for="volume"></output>
+        </label>
+      </div>
+    </section>
+
+    <div class="desk">
+      <section class="schedule" aria-labelledby="schedule-heading">
+        <div class="schedule-head">
+          <h2 id="schedule-heading" data-t="runningOrder">Running order</h2>
+          <p class="schedule-summary" id="schedule-summary"></p>
+          <div class="schedule-actions">
+            <button class="btn quiet" id="shuffle" type="button"><svg class="icon"><use href="#i-shuffle"/></svg><span data-t="shuffle">Shuffle</span></button>
+            <button class="btn quiet" id="clear" type="button"><svg class="icon"><use href="#i-clear"/></svg><span data-t="clear">Clear</span></button>
+          </div>
+        </div>
+        <table class="order">
+          <thead><tr><th class="c-time" data-t="colTime">Airs</th><th data-t="colTrack">Track</th><th class="c-len" data-t="colLength">Length</th><th class="c-by" data-t="colBy">Requested by</th><th class="c-x"><span class="visually-hidden" data-t="remove">Remove</span></th></tr></thead>
+          <tbody id="order"></tbody>
+        </table>
+        <p class="order-empty" id="order-empty" data-t="queueEmpty">Nothing scheduled. Requests from the panel and from TeamSpeak chat land here.</p>
+      </section>
+
+      <aside class="side">
+        <form class="panel request" id="request-form" autocomplete="off">
+          <h2><label for="query" data-t="requestLabel">Request a song</label></h2>
+          <input id="query" type="text" maxlength="500" data-t-placeholder="requestPlaceholder" placeholder="YouTube link or song name">
+          <div class="request-actions">
+            <button type="submit" class="btn primary" id="add"><svg class="icon"><use href="#i-add"/></svg><span data-t="play">Add to queue</span></button>
+            <button type="button" class="btn" id="play-next"><svg class="icon"><use href="#i-next"/></svg><span data-t="playNext">Play next</span></button>
+            <button type="button" class="btn" id="search"><svg class="icon"><use href="#i-search"/></svg><span data-t="searchButton">Search</span></button>
+          </div>
+          <p class="request-result" id="request-result" role="status"></p>
+          <ol class="results" id="results" hidden></ol>
+        </form>
+
+        <div class="panel loop">
+          <h2 id="loop-label" data-t="loop">Repeat</h2>
+          <div class="segmented" role="radiogroup" aria-labelledby="loop-label">
+            <button type="button" role="radio" data-loop="off" data-t="loopOff">Off</button>
+            <button type="button" role="radio" data-loop="one" data-t="loopOne">Track</button>
+            <button type="button" role="radio" data-loop="all" data-t="loopAll">Queue</button>
+          </div>
+        </div>
+
+        <section class="panel log" aria-labelledby="log-heading">
+          <div class="log-head">
+            <h2 id="log-heading" data-t="log">Log</h2>
+            <button class="btn quiet small" id="log-toggle" type="button" aria-expanded="false" data-t="logMore">Show more</button>
+          </div>
+          <ol id="log-lines" class="log-lines"></ol>
+        </section>
+      </aside>
+    </div>
+  </div>
+</body>
+</html>

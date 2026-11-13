@@ -26,6 +26,7 @@ Out of scope, please report these upstream:
 
 - On first start Mendil downloads the TeamSpeak client from TeamSpeak's servers. For the default version (3.6.2) the download is checked against the SHA-256 that TeamSpeak publishes, and a mismatch stops the container. For another version, set `TS3_CLIENT_SHA256`, or the download is used unverified (the log says so).
 - yt-dlp updates itself from PyPI in the background (`YTDLP_AUTO_UPDATE`). A new version must pass a self-test, otherwise it is rolled back, but a malicious release would still run once. Set `YTDLP_AUTO_UPDATE=false` if you'd rather take yt-dlp updates only with new Mendil images.
+- The native engine depends on [teamspeak-js](https://github.com/HoneyBBQ/teamspeak-js), pinned to an exact version in `package-lock.json`. Its identity is stored in the data volume (`mendil/native-identity`, readable only by the bot user); anyone with that file can connect as the bot.
 - `docker-compose.yml` uses the `latest` tag. To run exactly the version you tested, use a version tag such as `ghcr.io/ulaski/mendil:0.1.1`.
 
 ## Good to know
@@ -33,5 +34,6 @@ Out of scope, please report these upstream:
 - Mendil never needs ServerQuery credentials. It joins your server as a normal client.
 - Anyone who can talk to the bot can queue songs unless you set `ALLOWED_UIDS` or `ALLOWED_GROUPS`. That is a configuration choice, not a vulnerability.
 - `!play` accepts links to any site yt-dlp supports, not only YouTube. Mendil refuses addresses on private networks (loopback, LAN, link-local such as cloud metadata) unless you set `ALLOW_PRIVATE_URLS=true`. yt-dlp follows redirects on its own, so a public site that redirects to a private address is not caught; restrict who can use the bot if that matters on your network.
+- The web panel is protected by a password and a signed session cookie (HttpOnly, SameSite=Strict). It speaks plain HTTP, so don't publish it to the internet without a reverse proxy that adds HTTPS; the compose file binds it to 127.0.0.1. Ten wrong passwords from one address lock it out for ten minutes. Changing `PANEL_PASSWORD` signs everyone out.
 - The server and channel passwords reach the TeamSpeak client as a connect URL on its command line, so other processes in the container can see them, just as they can see the environment. They are masked in Mendil's debug log.
 - Cookies (`YTDLP_COOKIES_FILE`) give access to the Google account they came from. Use a throwaway account, as [docs/youtube.md](docs/youtube.md) says.

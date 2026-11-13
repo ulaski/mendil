@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events';
 import { promisify } from 'node:util';
 import { AUDIO_FORMAT } from './prefetch.js';
 import { MAX_FILESIZE, baseArgs, isGlobalError, summarizeError, ytdlpEvents } from './ytdlp.js';
+import { OpusStream, opusOutputArgs } from './voice/opus.js';
 
 const execFileAsync = promisify(execFile);
 const STDERR_TAIL = 4096;
@@ -62,7 +63,12 @@ const pushMetric = (list, value) => {
 };
 
 /**
- * Queue + playback into a PulseAudio sink whose monitor is the TeamSpeak client's microphone.
+ * Queue + playback. Where the audio goes depends on the voice engine (`output`):
+ *  - {kind: 'pulse', sink}: a PulseAudio sink whose monitor is the TeamSpeak client's
+ *    microphone (Classic). Volume is the sink volume, so it changes instantly.
+ *  - {kind: 'opus', bitrate, send, endSpeech}: ffmpeg encodes Opus and an OpusStream paces
+ *    the frames into the voice connection (Native). Volume is an ffmpeg filter, so changing
+ *    it restarts the current track from where it is.
  *
  * Sources, best first:
  *  - file:   the track was downloaded by the Prefetcher; ffmpeg plays it with a fixed
@@ -93,9 +99,9 @@ export class Player extends EventEmitter {
   #failures = 0;
   #lastEndAt = 0;
 
-  constructor({ sink, defaultVolume, normalize, cookiesFile, cacheDir, proxy, maxTrackDuration = 0, prefetcher = null, log, bin = {}, timing = {} }) {
+  constructor({ sink, output, defaultVolume, normalize, cookiesFile, cacheDir, proxy, maxTrackDuration = 0, prefetcher = null, log, bin = {}, timing = {} }) {
     super();
-    this.sink = sink;
+    this.output = output ?? { kind: 'pulse', sink };
     this.volume = defaultVolume;
     this.normalize = normalize;
     this.ytOpts = { cookiesFile, cacheDir, proxy };
@@ -115,8 +121,17 @@ export class Player extends EventEmitter {
   }
 
   async setVolume(percent) {
-    this.volume = Math.max(0, Math.min(100, Math.round(percent)));
-    await execFileAsync('pactl', ['set-sink-volume', this.sink, `${this.volume}%`]);
+    const volume = Math.max(0, Math.min(100, Math.round(percent)));
+    const changed = volume !== this.volume;
+    this.volume = volume;
+    if (this.output.kind === 'pulse') {
+      await execFileAsync('pactl', ['set-sink-volume', this.output.sink, `${this.volume}%`]);
+    } else if (changed && this.current && this.#procs && !this.paused) {
+      // The volume is part of ffmpeg's filter chain: pick up where we are with the new one.
+      const from = Math.max(0, Math.floor(this.current.position ?? 0));
+      this.#killProcs();
+      this.#load(this.current, from);
+    }
   }
 
   // --- queue ------------------------------------------------------------------
@@ -186,6 +201,7 @@ export class Player extends EventEmitter {
   pause() {
     if (!this.current || this.paused || !this.#procs) return false;
     this.#procs.ff.kill('SIGSTOP');
+    this.#procs.stream?.pause();
     this.paused = true;
     return true;
   }
@@ -200,6 +216,7 @@ export class Player extends EventEmitter {
     }
     if (!this.paused || !this.#procs) return false;
     this.#procs.ff.kill('SIGCONT');
+    this.#procs.stream?.resume();
     this.paused = false;
     this.#procs.lastProgressAt = Date.now();
     return true;
@@ -312,18 +329,22 @@ export class Player extends EventEmitter {
   #spawn(track, session, startAt, source) {
     const mode = source ? 'file' : 'stream';
     const seek = startAt > 0 ? ['-ss', String(startAt)] : [];
-    let filters = [];
-    if (this.normalize) {
-      filters = source?.gainDb != null ? ['-af', `volume=${source.gainDb}dB,${LIMITER}`] : ['-af', LOUDNORM];
-    }
-    const output = ['-ac', '2', '-ar', '48000', '-progress', 'pipe:3', '-stats_period', '0.5',
-      '-f', 'pulse', '-device', this.sink, '-name', 'mendil', 'music'];
+    const opus = this.output.kind === 'opus';
+    const chain = [];
+    if (this.normalize) chain.push(...(source?.gainDb != null ? [`volume=${source.gainDb}dB`, LIMITER] : [LOUDNORM]));
+    if (opus && this.volume !== 100) chain.push(`volume=${(this.volume / 100).toFixed(2)}`);
+    const filters = chain.length ? ['-af', chain.join(',')] : [];
+    const progress = ['-progress', 'pipe:3', '-stats_period', '0.5'];
+    const output = opus
+      ? [...progress, ...opusOutputArgs(this.output.bitrate)]
+      : ['-ac', '2', '-ar', '48000', ...progress, '-f', 'pulse', '-device', this.output.sink, '-name', 'mendil', 'music'];
+    const ffOut = opus ? 'pipe' : 'ignore';
 
     let yt = null;
     let ff;
     if (source) {
       ff = spawn(this.bin.ffmpeg, ['-hide_banner', '-loglevel', 'error', '-nostdin', ...seek, '-i', source.file,
-        '-vn', ...filters, ...output], { stdio: ['ignore', 'ignore', 'pipe', 'pipe'] });
+        '-vn', ...filters, ...output], { stdio: ['ignore', ffOut, 'pipe', 'pipe'] });
     } else {
       yt = spawn(this.bin.ytdlp, [
         ...baseArgs(this.ytOpts),
@@ -335,7 +356,7 @@ export class Player extends EventEmitter {
       ], { stdio: ['ignore', 'pipe', 'pipe'], detached: true }); // own group: see killProcessGroup()
       // -ss after -i: input is a pipe, so decode and drop up to the offset
       ff = spawn(this.bin.ffmpeg, ['-hide_banner', '-loglevel', 'error', '-i', 'pipe:0', ...seek,
-        '-vn', ...filters, ...output], { stdio: ['pipe', 'ignore', 'pipe', 'pipe'] });
+        '-vn', ...filters, ...output], { stdio: ['pipe', ffOut, 'pipe', 'pipe'] });
       yt.stdout.pipe(ff.stdin);
       // EPIPE etc. when one side dies first; the close handling below decides what happened.
       yt.stdout.on('error', () => {});
@@ -343,6 +364,7 @@ export class Player extends EventEmitter {
     }
 
     const procs = { yt, ff, mode, started: false, stalled: false, spawnedAt: Date.now(), lastProgressAt: Date.now() };
+    if (opus) procs.stream = new OpusStream(ff.stdout, { ...this.output, log: this.log });
     this.#procs = procs;
     let ytErr = '';
     let ffErr = '';
@@ -360,7 +382,9 @@ export class Player extends EventEmitter {
       for (const line of lines) {
         const m = line.match(/^out_time_us=(\d+)/);
         if (!m || session !== this.#session) continue;
-        const position = startAt + Number(m[1]) / 1e6;
+        // With Opus output ffmpeg runs ahead of what has been heard (pipe and frame buffer),
+        // so the position comes from the frames actually sent instead.
+        const position = procs.stream ? startAt + procs.stream.playedSeconds : startAt + Number(m[1]) / 1e6;
         if (position > (track.position ?? 0) || !procs.started) {
           if (Number(m[1]) > 0) procs.lastProgressAt = Date.now();
           track.position = position;
@@ -374,6 +398,14 @@ export class Player extends EventEmitter {
       if (session !== this.#session) return;
       const now = Date.now();
       const ceiling = this.#maxPosition(track);
+      if (procs.stream && procs.started && !this.paused) {
+        // ffmpeg reports progress only while it can write; the frames keep going meanwhile.
+        const position = startAt + procs.stream.playedSeconds;
+        if (position > track.position) {
+          track.position = position;
+          procs.lastProgressAt = now;
+        }
+      }
       if (this.paused) {
         procs.lastProgressAt = now;
       } else if (procs.started && track.position > ceiling) {
@@ -401,6 +433,11 @@ export class Player extends EventEmitter {
     closed(ff).then(async (ffCode) => {
       if (yt && isRunning(yt)) killProcessGroup(yt);
       const ytCode = await ytClosed;
+      // ffmpeg is done encoding, but the last second is still being sent.
+      if (procs.stream && session === this.#session) {
+        await procs.stream.drained;
+        if (procs.started) track.position = startAt + procs.stream.playedSeconds;
+      }
       clearInterval(procs.watch);
       if (session !== this.#session) return; // killed on purpose (skip/stop)
       this.#procs = null;
@@ -464,6 +501,7 @@ export class Player extends EventEmitter {
   }
 
   #killPipeline(procs) {
+    procs.stream?.stop();
     if (isRunning(procs.ff)) procs.ff.kill('SIGKILL'); // works on SIGSTOP'ed (paused) ffmpeg too
     if (procs.yt && isRunning(procs.yt)) killProcessGroup(procs.yt);
   }

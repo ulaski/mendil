@@ -1,6 +1,6 @@
 #!/bin/bash
-# Installs the TeamSpeak client if needed, prepares the virtual display + audio devices,
-# then hands over to the Node controller.
+# Classic engine: installs the TeamSpeak client if needed and prepares the virtual display
+# and audio devices. Native engine: none of that is needed. Then hands over to Node.
 set -euo pipefail
 
 log() { echo "$(date -u +%Y-%m-%dT%H:%M:%S.000Z) [entrypoint] $*"; }
@@ -52,15 +52,23 @@ Read its license (https://www.teamspeak.com/en/privacy-and-terms/) and set TS3CL
   log "TeamSpeak client installed to $TS3_CLIENT_DIR"
 }
 
-if [ "$(cat "$TS3_CLIENT_DIR/.installed-version" 2>/dev/null)" != "$TS3_CLIENT_VERSION" ] \
-   || [ ! -x "$TS3_CLIENT_DIR/ts3client_linux_amd64" ]; then
-  install_ts3_client
-fi
-
 # Leftovers from a previous run (/tmp survives container restarts): X lock files, the
 # health marker (must not report "healthy" before we reconnect), and yt-dlp's PyInstaller
 # extraction dirs (normally removed by yt-dlp itself, but not if it was killed hard).
 rm -rf /tmp/.X99-lock /tmp/.X11-unix/X99 /tmp/mendil.healthy /tmp/mendil-health.json /tmp/mendil-cache /tmp/_MEI* 2>/dev/null || true
+
+VOICE_BACKEND="$(echo "${VOICE_BACKEND:-classic}" | tr '[:upper:]' '[:lower:]')"
+if [ "$VOICE_BACKEND" = "native" ]; then
+  log "native engine: no TeamSpeak client, X server or PulseAudio needed"
+  log "yt-dlp $(yt-dlp --version)"
+  exec node /app/src/index.js
+fi
+command -v Xvfb >/dev/null || die "this image only has the native engine; set VOICE_BACKEND=native or use ghcr.io/ulaski/mendil:latest"
+
+if [ "$(cat "$TS3_CLIENT_DIR/.installed-version" 2>/dev/null)" != "$TS3_CLIENT_VERSION" ] \
+   || [ ! -x "$TS3_CLIENT_DIR/ts3client_linux_amd64" ]; then
+  install_ts3_client
+fi
 
 # --- Virtual X display for the Qt client -----------------------------------
 Xvfb "${DISPLAY}" -screen 0 1024x768x16 -nolisten tcp >/tmp/xvfb.log 2>&1 &

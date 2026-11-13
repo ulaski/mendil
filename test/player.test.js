@@ -234,3 +234,45 @@ test('restore drops queue entries whose URL looks like an option', () => {
   player.restore({ queue: [track('ok://a'), track('--exec=touch /tmp/x'), { title: 'x' }], current: null });
   assert.deepEqual(player.queue.map((t) => t.url), ['ok://a']);
 });
+
+// --- native engine output (Opus) -------------------------------------------------------
+
+function opusPlayer(extra = {}) {
+  const dir = tmp();
+  process.env.FAKE_LOG = path.join(dir, 'calls.log');
+  const frames = [];
+  const output = { kind: 'opus', bitrate: 128, send: (f) => (frames.push(f), true), endSpeech() {} };
+  const player = new Player({ output, defaultVolume: 100, normalize: false, log: quietLog, bin, timing: fastTiming, ...extra });
+  const calls = () => (fs.existsSync(process.env.FAKE_LOG)
+    ? fs.readFileSync(process.env.FAKE_LOG, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
+    : []);
+  return { player, calls };
+}
+
+test('opus output: ffmpeg encodes CBR Opus to its stdout and the track plays to the end', async () => {
+  const { player, calls } = opusPlayer();
+  let idle = false;
+  player.on('idle', () => (idle = true));
+  player.add([track('ok://a')]);
+  await waitFor(() => idle);
+  const ff = calls().find((c) => c.bin === 'ffmpeg').args;
+  assert.ok(ff.includes('libopus') && ff.includes('pipe:1'), ff.join(' '));
+  assert.deepEqual(ff.slice(ff.indexOf('-vbr'), ff.indexOf('-vbr') + 2), ['-vbr', 'off']);
+  assert.ok(!ff.includes('pulse'));
+  assert.ok(!ff.join(' ').includes('volume='), 'no volume filter at 100%');
+});
+
+test('opus output: changing the volume restarts the track where it is, with the new level', async () => {
+  const { player, calls } = opusPlayer();
+  let started = 0;
+  player.on('trackStart', () => started++);
+  player.add([track('ok://long', { duration: 30 })]);
+  await waitFor(() => started === 1);
+  await sleep(300);
+  await player.setVolume(40);
+  await waitFor(() => calls().filter((c) => c.bin === 'ffmpeg').length >= 2);
+  const second = calls().filter((c) => c.bin === 'ffmpeg')[1].args.join(' ');
+  assert.match(second, /volume=0\.40/);
+  assert.equal(started, 1, 'not announced again');
+  player.dispose();
+});
