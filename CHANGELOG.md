@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-13
+
+### Fixed
+- The web panel showed an empty page in 0.6.2 and 0.7.0. A quoting mistake in the Turkish YouTube error message stopped the panel's script from loading. A test now checks that the panel script parses.
+
 ## [0.7.0] - 2026-11-13
 
 Unraid templates and a Pterodactyl egg.
@@ -149,7 +154,8 @@ First public version of 🧻 Mendil.
 - A `stats:` log line every 10 minutes, and `/tmp/mendil-health.json` with connection details.
 - English and Turkish chat messages (`BOT_LANGUAGE`). Adding a language means translating one file.
 
-[Unreleased]: https://github.com/ulaski/mendil/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/ulaski/mendil/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/ulaski/mendil/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/ulaski/mendil/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/ulaski/mendil/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/ulaski/mendil/compare/v0.6.0...v0.6.1

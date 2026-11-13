@@ -5,7 +5,15 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
+import vm from 'node:vm';
 import { PanelServer } from '../src/panel/server.js';
+
+// The browser script is never run by the other tests, so a syntax error in it (0.6.2 and 0.7.0
+// shipped one) would only show up as a blank panel.
+test('the panel script parses', () => {
+  const src = fs.readFileSync(new URL('../src/panel/public/app.js', import.meta.url), 'utf8');
+  assert.doesNotThrow(() => new vm.Script(src, { filename: 'app.js' }));
+});
 
 const quietLog = { debug() {}, info() {}, warn() {}, error() {}, child() { return this; } };
 

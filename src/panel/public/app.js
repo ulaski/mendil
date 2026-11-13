@@ -84,7 +84,7 @@ const STRINGS = {
     errors: {
       empty: 'Bir link ya da aranacak bir şey yaz.', queueFull: 'Kuyruk dolu.', busy: 'Mendil şu an başka isteklerle meşgul. Birazdan tekrar dene.',
       blockedUrl: 'Bu adres özel bir ağda, o yüzden Mendil açmıyor.',
-      youtubeBlocked: "YouTube bu sunucudan gelen istekleri reddediyor. Dokümandaki "YouTube blocks" sayfasına bak.",
+      youtubeBlocked: 'YouTube bu sunucudan gelen istekleri reddediyor. Dokümandaki "YouTube blocks" sayfasına bak.',
       notFound: 'Çalınamadı: {reason}', tooLong: 'Bu parça sunucunun izin verdiğinden uzun.', noResults: 'Bir şey bulunamadı.',
       nothingPlaying: 'Yayında bir şey yok.', notPaused: 'Devam ettirilecek bir şey yok.', queueChanged: 'Yayın akışı değişti. Tekrar dene.',
       offline: "Mendil'e ulaşılamıyor. Bot çalışıyor mu?", generic: 'Olmadı ({error}).',
