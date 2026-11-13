@@ -1,5 +1,6 @@
 import { LOOP_MODES } from './player.js';
-import { isYoutubeBlock, resolveTracks, searchTracks, YOUTUBE_DOCS_URL } from './ytdlp.js';
+import { YOUTUBE_DOCS_URL } from './ytdlp.js';
+import { createRequests } from './requests.js';
 import { formatDuration, safe, trackLink } from './format.js';
 
 const LOOP_ALIASES = { off: 'off', one: 'one', track: 'one', all: 'all', queue: 'all' };
@@ -18,50 +19,39 @@ export function createCommands(bot) {
 
   const length = (track) => (track.isLive ? t('live') : formatDuration(track.duration));
 
-  async function enqueue(ctx, input, { front = false } = {}) {
-    if (!input) return ctx.reply(t('usagePlay'));
-    if (player.queue.length >= config.player.maxQueue) return ctx.reply(t('queueFull', { max: config.player.maxQueue }));
+  const requests = createRequests(bot);
 
-    let result;
-    try {
-      const started = Date.now();
-      result = await resolveTracks(input, config.player);
-      bot.recordResolve?.(Date.now() - started);
-    } catch (err) {
-      if (err.busy) return ctx.reply(t('busy'));
-      if (err.blockedUrl) return ctx.reply(t('blockedUrl'));
-      if (isYoutubeBlock(err.message)) return ctx.reply(t('youtubeBlocked', { url: YOUTUBE_DOCS_URL }));
-      return ctx.reply(t('notFound', { reason: safe(err.message) }));
+  /** Turns a request() result into a chat reply. */
+  function replyTo(ctx, result) {
+    if (!result.ok) {
+      switch (result.error) {
+        case 'empty': return ctx.reply(t('usagePlay'));
+        case 'queueFull': return ctx.reply(t('queueFull', { max: config.player.maxQueue }));
+        case 'busy': return ctx.reply(t('busy'));
+        case 'blockedUrl': return ctx.reply(t('blockedUrl'));
+        case 'youtubeBlocked': return ctx.reply(t('youtubeBlocked', { url: YOUTUBE_DOCS_URL }));
+        case 'tooLong': return ctx.reply(t('tooLong', { max: formatDuration(config.player.maxTrackDuration) }));
+        case 'noResults': return ctx.reply(t('noResults'));
+        default: return ctx.reply(t('notFound', { reason: safe(result.reason ?? '') }));
+      }
     }
-    return addTracks(ctx, result.tracks, { front, playlistTitle: result.playlistTitle });
-  }
-
-  function addTracks(ctx, found, { front = false, playlistTitle = null } = {}) {
-    const max = config.player.maxTrackDuration;
-    let tracks = found.filter((tr) => !max || tr.isLive || !tr.duration || tr.duration <= max);
-    const tooLong = found.length - tracks.length;
-    tracks = tracks.slice(0, config.player.maxQueue - player.queue.length);
-    if (tracks.length === 0) {
-      return ctx.reply(tooLong ? t('tooLong', { max: formatDuration(max) }) : t('noResults'));
-    }
-
-    const requested = tracks.map((tr) => ({ ...tr, requestedBy: ctx.invokerName }));
-    const wasIdle = !player.isPlaying;
-    const position = front ? 1 : player.queue.length + 1;
-    player.add(requested, { front });
-
-    if (tracks.length > 1) {
+    const { added, position, wasIdle, playlistTitle, tooLong } = result;
+    if (added.length > 1) {
       const skipped = tooLong ? t('tooLongSkipped', { count: tooLong }) : '';
       const msg = playlistTitle
-        ? t('playlistAddedFrom', { count: tracks.length, name: `[b]${safe(playlistTitle)}[/b]` })
-        : t('playlistAdded', { count: tracks.length });
+        ? t('playlistAddedFrom', { count: added.length, name: `[b]${safe(playlistTitle)}[/b]` })
+        : t('playlistAdded', { count: added.length });
       return ctx.reply(msg.replace(/\.$/, `${skipped}.`));
     }
-    const vars = { track: trackLink(tracks[0]), length: length(tracks[0]) };
+    const vars = { track: trackLink(added[0]), length: length(added[0]) };
     // When idle the track starts right away and the 'now playing' announcement covers it.
     if (wasIdle && config.bot.announceTracks) return undefined;
     if (wasIdle) return ctx.reply(t('playingNow', vars));
     return ctx.reply(t('queued', { ...vars, position }));
+  }
+
+  async function enqueue(ctx, input, { front = false } = {}) {
+    return replyTo(ctx, await requests.request(input, { front, requestedBy: ctx.invokerName }));
   }
 
   function parseIndex(arg, max) {
@@ -83,14 +73,13 @@ export function createCommands(bot) {
       names: ['search', 'find'],
       run: async (ctx, arg) => {
         if (!arg) return ctx.reply(t('usageSearch'));
-        let results;
-        try {
-          results = await searchTracks(arg, { ...config.player, count: 5 });
-        } catch (err) {
-          if (err.busy) return ctx.reply(t('busy'));
-          if (isYoutubeBlock(err.message)) return ctx.reply(t('youtubeBlocked', { url: YOUTUBE_DOCS_URL }));
-          return ctx.reply(t('searchFailed', { reason: safe(err.message) }));
+        const found = await requests.search(arg);
+        if (!found.ok) {
+          if (found.error === 'busy') return ctx.reply(t('busy'));
+          if (found.error === 'youtubeBlocked') return ctx.reply(t('youtubeBlocked', { url: YOUTUBE_DOCS_URL }));
+          return ctx.reply(t('searchFailed', { reason: safe(found.reason ?? '') }));
         }
+        const { results } = found;
         if (results.length === 0) return ctx.reply(t('noResults'));
         searchResults.set(ctx.invokerUid, results);
         const lines = results.map((tr, i) => `[b]${i + 1}.[/b] ${trackLink(tr)} (${length(tr)})`);
@@ -104,8 +93,7 @@ export function createCommands(bot) {
         if (!results) return ctx.reply(t('searchFirst'));
         const n = parseIndex(arg, results.length);
         if (!n) return ctx.reply(t('pickRange', { max: results.length }));
-        if (player.queue.length >= config.player.maxQueue) return ctx.reply(t('queueFull', { max: config.player.maxQueue }));
-        return addTracks(ctx, [results[n - 1]]);
+        return replyTo(ctx, requests.admit([results[n - 1]], { requestedBy: ctx.invokerName }));
       },
     },
     {

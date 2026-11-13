@@ -1,7 +1,7 @@
 {
   "name": "mendil",
   "version": "0.1.1",
-  "description": "Mendil: a self-hosted music bot for TeamSpeak 3. Request songs in chat, it plays them in your channel.",
+  "description": "Mendil: a self-hosted music bot for TeamSpeak 3 and 6. Request songs in chat, it plays them in your channel.",
   "keywords": [
     "teamspeak",
     "teamspeak3",
@@ -21,10 +21,13 @@
   "private": true,
   "main": "src/index.js",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12"
   },
   "scripts": {
     "start": "node src/index.js",
     "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@honeybbq/teamspeak": "1.0.0-beta.30"
   }
 }

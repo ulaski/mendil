@@ -12,3 +12,8 @@ updates:
     directory: /docker
     schedule:
       interval: weekly
+  # teamspeak-js (native engine) is pre-1.0 and moves fast; CI's end-to-end test checks each bump.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly

@@ -41,8 +41,18 @@ export function loadConfig() {
   // Mendil's own persistent files live on the same volume as the TS3 identity.
   const dataDir = env.MENDIL_DATA_DIR || path.join(configDir, 'mendil');
 
+  const backend = (env.VOICE_BACKEND || 'classic').toLowerCase();
+  if (!['classic', 'native'].includes(backend)) {
+    throw new Error(`VOICE_BACKEND must be "classic" or "native", not "${env.VOICE_BACKEND}".`);
+  }
+
   return {
     dataDir,
+    voice: {
+      backend,
+      // Opus bitrate of the native engine (CBR). 192 kbit/s is the most a voice packet holds.
+      bitrate: int(env.NATIVE_BITRATE, 128, { min: 48, max: 192 }),
+    },
     ts3: {
       host,
       port,
@@ -76,6 +86,14 @@ export function loadConfig() {
       prefetch: bool(env.PREFETCH, true),
       prefetchDir: env.PREFETCH_DIR || '/tmp/mendil-cache',
       prefetchMaxDuration: int(env.PREFETCH_MAX_DURATION, 30 * 60, { min: 0 }),
+    },
+    panel: {
+      // 0 turns the web panel off. In Docker, publish the port to reach it (see README).
+      port: int(env.PANEL_PORT, 8080, { min: 0, max: 65535 }),
+      host: env.PANEL_HOST || '0.0.0.0',
+      password: env.PANEL_PASSWORD || '',
+      // Behind a reverse proxy, take the client address from X-Forwarded-For (for the login limit).
+      trustProxy: bool(env.PANEL_TRUST_PROXY, false),
     },
     ytdlp: {
       autoUpdate: bool(env.YTDLP_AUTO_UPDATE, true),

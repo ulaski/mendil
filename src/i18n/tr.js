@@ -12,6 +12,7 @@ export default {
   nothingPlaying: 'Şu an bir şey çalmıyor.',
   pickRange: '1 ile {max} arasında bir numara gir.',
   busy: 'Şu an çok fazla istek var — birazdan tekrar dene.',
+  panelUser: 'web paneli',
   slowDown: 'Biraz yavaş: birkaç saniye sonra tekrar dene.',
   blockedUrl: 'Bu adres özel bir ağda, o yüzden açmıyorum.',
 

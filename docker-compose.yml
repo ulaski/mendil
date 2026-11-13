@@ -13,6 +13,9 @@ services:
       options:
         max-size: 10m
         max-file: "3"
+    # Web panel (README "Web panel"). Keep 127.0.0.1 unless it's behind a reverse proxy with HTTPS.
+    # ports:
+    #   - "127.0.0.1:8080:8080"
     volumes:
       - ts3client-data:/home/node/.ts3client # identity + settings
       - ts3client-bin:/opt/ts3client # downloaded TeamSpeak client
