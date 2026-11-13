@@ -4,16 +4,8 @@
  * codes (A1, B3…) run through the sidebar. The reading column itself stays plain.
  */
 
+/* Colours and strip metrics come from tokens.css (shared with the landing page). */
 :root {
-  --mendil-coral: #f2655a;
-  --mendil-teal: #0e6e73;
-  --mendil-cream: #fbf1de;
-  --mendil-cabinet: #0b2e30;
-  --mendil-strip: #fbf1de;
-  --mendil-strip-ink: #1b1d1f;
-  --mendil-display: 'Archivo Variable', 'Archivo', system-ui, sans-serif;
-  --mendil-typed: 'Courier Prime', 'Courier New', monospace;
-
   --sl-font: var(--mendil-display);
   --sl-font-system-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
   --sl-line-height: 1.7;
@@ -60,15 +52,15 @@ header.header {
   --sl-color-gray-3: #a9b9b8;
   --sl-color-gray-5: #34494a;
   --sl-color-gray-6: #1a3133;
-  --sl-color-black: #0b2e30;
-  color: #f4f1ea;
+  --sl-color-black: var(--mendil-cabinet);
+  color: var(--mendil-cabinet-ink);
 }
 header.header .site-title {
   font-weight: 800;
   font-stretch: 85%;
   font-size: 1.3rem;
   letter-spacing: -0.01em;
-  color: #f4f1ea;
+  color: var(--mendil-cabinet-ink);
 }
 header.header .site-title img {
   height: 2.1rem;
@@ -99,7 +91,7 @@ header.header .site-title img {
 /* The selected page reads as a pressed selection: coral at night, teal by day. */
 :root:not([data-theme='light']) .sidebar-content a[aria-current='page'] {
   background-color: var(--mendil-coral);
-  color: #1b1d1f;
+  color: var(--mendil-strip-ink);
 }
 .sidebar-content .group-label .large {
   font-stretch: 80%;
@@ -183,4 +175,17 @@ header.header .site-title img {
   .sl-markdown-content td:empty {
     display: none;
   }
+}
+
+/* Browser surfaces in the palette. */
+::selection {
+  background: var(--mendil-coral);
+  color: var(--mendil-strip-ink);
+}
+:focus-visible {
+  outline-color: var(--sl-color-accent);
+}
+html {
+  accent-color: var(--sl-color-accent);
+  scrollbar-color: var(--sl-color-gray-5) transparent;
 }

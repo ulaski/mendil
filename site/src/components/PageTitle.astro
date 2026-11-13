@@ -59,20 +59,20 @@ sidebar.forEach((group, g) => {
     margin-top: 1rem;
     background: var(--mendil-strip);
     color: var(--mendil-strip-ink);
-    border-top: 0.5rem solid var(--mendil-coral);
-    border-bottom: 0.5rem solid var(--mendil-teal);
-    border-radius: 3px;
-    box-shadow: 0 1px 2px rgb(0 0 0 / 0.18), 0 6px 18px -10px rgb(0 0 0 / 0.35);
+    border-top: var(--mendil-band) solid var(--mendil-coral);
+    border-bottom: var(--mendil-band) solid var(--mendil-teal);
+    border-radius: var(--mendil-strip-radius);
+    box-shadow: var(--mendil-strip-shadow);
   }
   .title-strip__code {
     display: grid;
     place-items: center;
     min-width: 3.4rem;
     padding: 0 0.75rem;
-    border-right: 1px solid color-mix(in srgb, var(--mendil-strip-ink) 22%, transparent);
+    border-right: 1px solid var(--mendil-code-rule);
     font-family: var(--mendil-display);
-    font-stretch: 70%;
-    font-weight: 800;
+    font-stretch: var(--mendil-code-stretch);
+    font-weight: var(--mendil-code-weight);
     font-size: 1.25rem;
     letter-spacing: 0.04em;
     font-variant-numeric: tabular-nums;

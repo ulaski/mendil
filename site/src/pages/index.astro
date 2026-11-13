@@ -8,6 +8,9 @@ import '@fontsource/courier-prime/700.css';
 import demo from '../assets/demo.gif';
 import logo from '../assets/logo.png';
 import pkg from '../../../package.json';
+import { getCollection } from 'astro:content';
+import { sidebar } from '../lib/sidebar.mjs';
+import '../styles/tokens.css';
 
 const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 const docs = (slug) => `${base}${slug}/`;
@@ -19,50 +22,68 @@ const install = [
   'curl -fsSL -o .env https://raw.githubusercontent.com/ulaski/mendil/main/.env.example',
 ];
 
-// Example exchanges, written with Mendil's real reply texts (src/i18n/en.js).
+// Every selection code on this page is the code of the docs page that covers it (the same code
+// the docs sidebar and page title show), taken from the shared sidebar order.
+const code = (slug) => {
+  for (const [g, group] of sidebar.entries()) {
+    const i = group.items.indexOf(slug);
+    if (i >= 0) return `${String.fromCharCode(65 + g)}${i + 1}`;
+  }
+  throw new Error(`no docs page ${slug}`);
+};
+const titles = new Map((await getCollection('docs')).map((e) => [e.id, e.data.title]));
+const page = (slug) => ({ code: code(slug), href: docs(slug), title: titles.get(slug) });
+
+// Example exchanges, written with Mendil's real message texts (src/i18n/en.js).
 const selections = [
   {
-    code: 'C1', label: 'Search or link', command: '!play <song or link>',
+    ...page('reference/commands'), label: 'Search or link', command: '!play <song or link>',
     lines: [
       ['Deniz', '!play fontaines d.c. mimesis'],
       ['Mendil', '▶ Now playing: Fontaines D.C. - Mimesis (Lyric Video) (3:52) — requested by Deniz'],
     ],
   },
   {
-    code: 'C2', label: 'Spotify albums', command: '!play <Spotify link>',
+    ...page('help/faq'), label: 'Spotify albums', command: '!play <Spotify link>',
     lines: [
       ['Ece', '!play https://open.spotify.com/album/…'],
       ['Mendil', 'Added 11 tracks from Romance to the queue.'],
     ],
   },
   {
-    code: 'C3', label: 'The queue', command: '!queue',
-    lines: [
-      ['Mert', '!queue'],
-      ['Mendil', '▶ Fontaines D.C. - Starburster (4:25)\n1. Fontaines D.C. - Mimesis (3:52) — Deniz\n2. Fontaines D.C. - Favourite (4:42) — Ece\nIn queue: 2, ~8:34 total — loop: off'],
-    ],
-  },
-  {
-    code: 'C4', label: 'Jump ahead', command: '!seek 1:30',
-    lines: [
-      ['Deniz', '!seek 1:30'],
-      ['Mendil', 'Jumped to 1:30 of 3:52.'],
-    ],
-  },
-  {
-    code: 'C5', label: 'Radio when it’s quiet', command: '!radio <station>',
+    ...page('guides/radio'), label: 'Radio when it’s quiet', command: '!radio <station>',
     lines: [
       ['Ece', '!radio radio paradise'],
       ['Mendil', '📻 Radio on: Radio Paradise. It plays whenever the queue is empty.'],
     ],
   },
   {
-    code: 'C6', label: 'Admins and listeners', command: '!skip',
+    ...page('guides/roles'), label: 'Admins and listeners', command: '!skip',
     lines: [
       ['Mert', '!skip'],
       ['Mendil', 'You can only skip or remove songs you requested.'],
     ],
   },
+  {
+    ...page('guides/web-panel'), label: 'Code by private message', command: 'web panel sign-in',
+    lines: [
+      ['Mendil', 'Your Mendil web panel code: 482913. It works for 5 minutes. If you did not ask for it, ignore this message.'],
+    ],
+  },
+  {
+    ...page('guides/server-settings'), label: 'Says what to fix', command: 'channel check',
+    lines: [
+      ['Mendil', '🧻 Heads-up: this channel uses Opus Voice (quality 6), which makes music sound poor. An admin can switch it to Opus Music, quality 10 (Edit Channel → Audio).'],
+    ],
+  },
+];
+const intro = page('start/introduction');
+const quick = page('start/quick-start');
+const howItWorks = page('project/how-it-works');
+const facts = [
+  { ...page('help/faq'), label: 'TS3 and TS6', note: 'Tested on both servers' },
+  { ...howItWorks, label: 'One container', note: 'x86_64; ARM64 with the Native engine' },
+  { ...page('project/contributing'), label: 'Open source', note: 'GPL-3.0, on GitHub' },
 ];
 const first = selections[0];
 ---
@@ -101,7 +122,7 @@ const first = selections[0];
     <main id="front">
       <section class="front" aria-labelledby="headline">
         <div class="strip strip--headline">
-          <span class="strip__code" aria-hidden="true">A1</span>
+          <span class="strip__code" aria-hidden="true">{intro.code}</span>
           <div class="strip__body">
             <h1 id="headline">Song requests for your TeamSpeak server</h1>
             <p class="strip__typed">Write a song in chat. Mendil plays it in your channel.</p>
@@ -110,15 +131,15 @@ const first = selections[0];
 
         <div class="front__deck">
           <div class="front__side front__side--left">
-            <a class="strip strip--action" href={docs('start/quick-start')}>
-              <span class="strip__code" aria-hidden="true">A2</span>
+            <a class="strip strip--action" href={quick.href}>
+              <span class="strip__code" aria-hidden="true">{quick.code}</span>
               <span class="strip__body">
                 <span class="strip__label">Quick start</span>
                 <span class="strip__note">Set your server, then docker compose up</span>
               </span>
             </a>
             <div class="strip strip--install">
-              <span class="strip__code" aria-hidden="true">A3</span>
+              <span class="strip__code" aria-hidden="true">{quick.code}</span>
               <div class="strip__body">
                 <h2 class="strip__label">Install</h2>
                 <pre class="install" id="install"><code>{install.map((l) => <span title={l}>{l}</span>)}</code></pre>
@@ -146,18 +167,14 @@ const first = selections[0];
           </figure>
 
           <ul class="front__side front__side--right" aria-label="At a glance">
-            <li class="strip strip--fact">
-              <span class="strip__code" aria-hidden="true">B1</span>
-              <span class="strip__body"><span class="strip__label">TS3 and TS6</span><span class="strip__note">Tested on both servers</span></span>
-            </li>
-            <li class="strip strip--fact">
-              <span class="strip__code" aria-hidden="true">B2</span>
-              <span class="strip__body"><span class="strip__label">Open source</span><span class="strip__note">GPL-3.0, on GitHub</span></span>
-            </li>
-            <li class="strip strip--fact">
-              <span class="strip__code" aria-hidden="true">B3</span>
-              <span class="strip__body"><span class="strip__label">One container</span><span class="strip__note">x86_64; ARM64 with the Native engine</span></span>
-            </li>
+            {facts.map((f) => (
+              <li>
+                <a class="strip strip--fact" href={f.href}>
+                  <span class="strip__code" aria-hidden="true">{f.code}</span>
+                  <span class="strip__body"><span class="strip__label">{f.label}</span><span class="strip__note">{f.note}</span></span>
+                </a>
+              </li>
+            ))}
           </ul>
         </div>
       </section>
@@ -179,6 +196,8 @@ const first = selections[0];
                   aria-controls="slip"
                   data-code={s.code}
                   data-lines={JSON.stringify(s.lines)}
+                  data-href={s.href}
+                  data-page={`${s.code}: ${s.title}`}
                 >
                   <span class="strip__code">{s.code}</span>
                   <span class="strip__body">
@@ -200,6 +219,7 @@ const first = selections[0];
                 <li class={who === 'Mendil' ? 'is-bot' : ''}><b>{who}</b><span>{text}</span></li>
               ))}
             </ol>
+            <p class="slip__more">Read <a id="slip-page" href={first.href}>{first.code}: {first.title}</a></p>
           </div>
         </div>
       </section>
@@ -208,7 +228,7 @@ const first = selections[0];
         <h2 id="engines-title">Two ways into your server</h2>
         <div class="engines__pair">
           <div class="strip strip--engine">
-            <span class="strip__code" aria-hidden="true">D1</span>
+            <span class="strip__code" aria-hidden="true">{howItWorks.code}</span>
             <div class="strip__body">
               <h3 class="strip__label">Classic</h3>
               <p class="strip__note strip__note--lead">TeamSpeak’s own client, run without a screen.</p>
@@ -216,7 +236,7 @@ const first = selections[0];
             </div>
           </div>
           <div class="strip strip--engine">
-            <span class="strip__code" aria-hidden="true">D2</span>
+            <span class="strip__code" aria-hidden="true">{howItWorks.code}</span>
             <div class="strip__body">
               <h3 class="strip__label">Native <span class="tag">experimental</span></h3>
               <p class="strip__note strip__note--lead">Speaks the TeamSpeak protocol itself.</p>
@@ -224,7 +244,7 @@ const first = selections[0];
             </div>
           </div>
         </div>
-        <p class="engines__more">One setting switches between them. <a href={docs('project/how-it-works')}>How it works</a></p>
+        <p class="engines__more">One setting switches between them. <a href={howItWorks.href}>{howItWorks.code}: {howItWorks.title}</a></p>
       </section>
 
       <section class="name" aria-labelledby="name-title">
@@ -237,8 +257,8 @@ const first = selections[0];
 
       <section class="close" aria-labelledby="close-title">
         <h2 id="close-title" class="visually-hidden">Get Mendil</h2>
-        <a class="strip strip--action strip--close" href={docs('start/quick-start')}>
-          <span class="strip__code" aria-hidden="true">A2</span>
+        <a class="strip strip--action strip--close" href={quick.href}>
+          <span class="strip__code" aria-hidden="true">{quick.code}</span>
           <span class="strip__body">
             <span class="strip__label">Start with the quick start</span>
             <span class="strip__note">Docker, your server's address, and one command</span>
@@ -319,6 +339,9 @@ const first = selections[0];
         button.addEventListener('click', () => {
           for (const other of document.querySelectorAll('.strip--select')) other.setAttribute('aria-pressed', String(other === button));
           display.textContent = button.dataset.code;
+          const more = document.getElementById('slip-page');
+          more.href = button.dataset.href;
+          more.textContent = button.dataset.page;
           if (!still.matches) {
             display.classList.remove('is-flipping');
             void display.offsetWidth;
@@ -330,24 +353,26 @@ const first = selections[0];
     </script>
 
     <style is:global>
+      /* Short names for this page; the values live in src/styles/tokens.css. */
       :root {
-        --cabinet: #0b2e30;
-        --cabinet-deep: #082325;
-        --cabinet-ink: #f4f1ea;
-        --cabinet-ink-2: #b4c9c8;
-        --teal: #0e6e73;
-        --coral: #f2655a;
-        --strip: #fbf1de;
-        --ink: #1b1d1f;
-        --ink-2: #4a4f52;
-        --display: 'Archivo Variable', 'Archivo', system-ui, sans-serif;
-        --typed: 'Courier Prime', 'Courier New', monospace;
+        --cabinet: var(--mendil-cabinet);
+        --cabinet-deep: var(--mendil-cabinet-deep);
+        --cabinet-line: var(--mendil-cabinet-line);
+        --cabinet-ink: var(--mendil-cabinet-ink);
+        --cabinet-ink-2: var(--mendil-cabinet-ink-2);
+        --teal: var(--mendil-teal);
+        --coral: var(--mendil-coral);
+        --strip: var(--mendil-strip);
+        --ink: var(--mendil-strip-ink);
+        --ink-2: var(--mendil-strip-ink-2);
+        --display: var(--mendil-display);
+        --typed: var(--mendil-typed);
         --gutter: clamp(16px, 4vw, 48px);
-        --radius: 3px;
+        --radius: var(--mendil-strip-radius);
         color-scheme: dark;
       }
       * { box-sizing: border-box; }
-      html { background: var(--cabinet); scrollbar-color: #2c5557 var(--cabinet-deep); }
+      html { background: var(--cabinet); scrollbar-color: var(--mendil-cabinet-scroll) var(--cabinet-deep); }
       body {
         margin: 0;
         background: var(--cabinet);
@@ -384,17 +409,17 @@ const first = selections[0];
         grid-template-columns: auto minmax(0, 1fr);
         background: var(--strip);
         color: var(--ink);
-        border-top: 0.42rem solid var(--coral);
-        border-bottom: 0.42rem solid var(--teal);
+        border-top: var(--mendil-band) solid var(--coral);
+        border-bottom: var(--mendil-band) solid var(--teal);
         border-radius: var(--radius);
-        box-shadow: 0 1px 1px rgb(0 0 0 / 0.25), 0 12px 24px -16px rgb(0 0 0 / 0.7);
+        box-shadow: var(--mendil-strip-shadow);
         text-decoration: none;
       }
       .strip__code {
         display: grid; place-items: center;
         min-width: 3.4rem; padding: 0 0.7rem;
-        border-right: 1px solid rgb(27 29 31 / 0.2);
-        font-stretch: 68%; font-weight: 820; font-size: 1.15rem; letter-spacing: 0.04em;
+        border-right: 1px solid var(--mendil-code-rule);
+        font-stretch: var(--mendil-code-stretch); font-weight: var(--mendil-code-weight); font-size: 1.15rem; letter-spacing: 0.04em;
         font-variant-numeric: tabular-nums;
       }
       .strip__body { display: flex; flex-direction: column; gap: 0.15rem; padding: 0.7rem 1rem 0.75rem; min-width: 0; }
@@ -406,7 +431,7 @@ const first = selections[0];
 
       /* First viewport: the jukebox front */
       .front { max-width: 1320px; margin: 0 auto; padding: clamp(20px, 3.4vw, 40px) var(--gutter) clamp(36px, 5vw, 64px); }
-      .strip--headline { border-top-width: 0.7rem; border-bottom-width: 0.7rem; }
+      .strip--headline { border-top-width: var(--mendil-band-headline); border-bottom-width: var(--mendil-band-headline); }
       .strip--headline .strip__code { min-width: 5.2rem; font-size: clamp(1.4rem, 2.4vw, 2rem); }
       .strip--headline .strip__body { padding: clamp(14px, 2vw, 22px) clamp(16px, 2.4vw, 30px); gap: 0.5rem; }
       .strip--headline h1 {
@@ -429,17 +454,17 @@ const first = selections[0];
       .strip--install .strip__body { gap: 0.5rem; }
       .install {
         margin: 0; padding: 0.55rem 0.7rem 0.45rem;
-        background: #f2e5c9; border-radius: 2px;
+        background: var(--mendil-strip-well); border-radius: 2px;
         font-family: var(--typed); font-size: 0.82rem; line-height: 1.6; color: var(--ink);
-        overflow-x: auto; scrollbar-width: thin; scrollbar-color: #8a7a5a #eadbbb;
+        overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--mendil-strip-scroll) var(--mendil-strip-scroll-track);
         /* The lines run past the edge: fade it, and keep a scrollbar visible, so it reads as scrollable. */
         -webkit-mask-image: linear-gradient(to right, #000 82%, transparent);
         mask-image: linear-gradient(to right, #000 82%, transparent);
       }
       .install:hover, .install:focus-within { -webkit-mask-image: none; mask-image: none; }
       .install::-webkit-scrollbar { height: 6px; }
-      .install::-webkit-scrollbar-track { background: #eadbbb; border-radius: 3px; }
-      .install::-webkit-scrollbar-thumb { background: #8a7a5a; border-radius: 3px; }
+      .install::-webkit-scrollbar-track { background: var(--mendil-strip-scroll-track); border-radius: 3px; }
+      .install::-webkit-scrollbar-thumb { background: var(--mendil-strip-scroll); border-radius: 3px; }
       /* One command per line, scrolled sideways rather than cut, so what you copy is what you read. */
       .install span { display: block; white-space: pre; }
       .copy {
@@ -464,7 +489,7 @@ const first = selections[0];
         display: block;
         padding: clamp(8px, 1vw, 12px);
         background: var(--cabinet-deep);
-        border: 1px solid #1f4c4f;
+        border: 1px solid var(--cabinet-line);
         border-radius: 10px;
         box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.4), 0 18px 40px -24px rgb(0 0 0 / 0.8);
       }
@@ -472,7 +497,7 @@ const first = selections[0];
       .window figcaption { margin-top: 0.6rem; font-size: 0.85rem; color: var(--cabinet-ink-2); text-align: center; }
 
       /* Selection rack */
-      .rack { background: var(--cabinet-deep); border-top: 1px solid #1f4c4f; border-bottom: 1px solid #1f4c4f; }
+      .rack { background: var(--cabinet-deep); border-top: 1px solid var(--cabinet-line); border-bottom: 1px solid var(--cabinet-line); }
       .rack__head, .rack__body { max-width: 1320px; margin: 0 auto; padding-inline: var(--gutter); }
       .rack__head {
         display: grid; gap: 8px;
@@ -483,7 +508,7 @@ const first = selections[0];
       .display {
         display: grid; place-items: center;
         min-width: 5.6rem; height: 3.7rem; padding: 0 0.8rem;
-        background: #050f10; border: 2px solid #1f4c4f; border-radius: 8px;
+        background: var(--mendil-glass); border: 2px solid var(--cabinet-line); border-radius: 8px;
         box-shadow: inset 0 2px 10px rgb(0 0 0 / 0.8);
         overflow: hidden;
       }
@@ -507,7 +532,7 @@ const first = selections[0];
       .strip--select:hover { transform: translateY(-2px); }
       .strip--select .strip__label { font-size: 0.97rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .strip--fact .strip__label { font-size: 1.05rem; }
-      .strip--select[aria-pressed='true'] { background: #fff8ea; box-shadow: 0 0 0 3px var(--coral), 0 12px 24px -16px rgb(0 0 0 / 0.7); transform: translateY(1px); }
+      .strip--select[aria-pressed='true'] { background: var(--mendil-strip-pressed); box-shadow: 0 0 0 3px var(--coral), 0 12px 24px -16px rgb(0 0 0 / 0.7); transform: translateY(1px); }
       .strip--select[aria-pressed='true'] .strip__code { background: var(--ink); color: var(--strip); }
 
       .slip {
@@ -525,6 +550,10 @@ const first = selections[0];
       .slip__lines b { font-family: var(--display); font-weight: 800; font-stretch: 85%; }
       .slip__lines li.is-bot b { color: var(--teal); }
       .slip__lines span { white-space: pre-line; overflow-wrap: anywhere; }
+      .slip__more { margin-top: 0.9rem; padding-top: 0.7rem; border-top: 1px dashed rgb(27 29 31 / 0.35); font-size: 0.95rem; color: var(--ink-2); }
+      .slip__more a { color: var(--teal); font-weight: 700; }
+      .strip--fact { transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1); }
+      .strip--fact:hover { transform: translateY(-2px); }
 
       /* Engines */
       .engines { max-width: 1320px; margin: 0 auto; padding: clamp(44px, 6vw, 80px) var(--gutter) clamp(20px, 3vw, 36px); }
@@ -546,7 +575,7 @@ const first = selections[0];
       .strip--close .strip__label { font-size: clamp(1.5rem, 3vw, 2.2rem); }
       .close__links { display: flex; flex-wrap: wrap; gap: 10px 28px; font-weight: 650; font-stretch: 90%; }
 
-      .small-print { border-top: 1px solid #1f4c4f; padding: 22px var(--gutter) 30px; color: var(--cabinet-ink-2); font-size: 0.9rem; display: grid; gap: 4px; max-width: 1320px; margin: 0 auto; }
+      .small-print { border-top: 1px solid var(--cabinet-line); padding: 22px var(--gutter) 30px; color: var(--cabinet-ink-2); font-size: 0.9rem; display: grid; gap: 4px; max-width: 1320px; margin: 0 auto; }
 
       @media (max-width: 1100px) {
         .front__deck { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }

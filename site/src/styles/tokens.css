@@ -1,0 +1,42 @@
+/*
+ * Mendil site tokens: the one place for the jukebox world's colours and strip metrics,
+ * shared by the landing page (src/pages/index.astro) and the docs theme (docs.css,
+ * components/PageTitle.astro).
+ */
+:root {
+  /* Brand inks */
+  --mendil-coral: #f2655a;
+  --mendil-teal: #0e6e73;
+  --mendil-cream: #fbf1de;
+
+  /* The cabinet: the deep teal ground */
+  --mendil-cabinet: #0b2e30;
+  --mendil-cabinet-deep: #082325;
+  --mendil-cabinet-line: #1f4c4f;
+  --mendil-cabinet-scroll: #2c5557;
+  --mendil-cabinet-ink: #f4f1ea;
+  --mendil-cabinet-ink-2: #b4c9c8;
+  --mendil-glass: #050f10; /* behind the selection display */
+
+  /* Title strips: cream card stock */
+  --mendil-strip: #fbf1de;
+  --mendil-strip-pressed: #fff8ea;
+  --mendil-strip-well: #f2e5c9; /* the inset under typed commands */
+  --mendil-strip-scroll: #8a7a5a;
+  --mendil-strip-scroll-track: #eadbbb;
+  --mendil-strip-ink: #1b1d1f;
+  --mendil-strip-ink-2: #4a4f52;
+
+  /* Strip metrics */
+  --mendil-band: 0.45rem; /* coral band on top, teal band below */
+  --mendil-band-headline: 0.7rem;
+  --mendil-strip-radius: 3px;
+  --mendil-strip-shadow: 0 1px 1px rgb(0 0 0 / 0.25), 0 12px 24px -16px rgb(0 0 0 / 0.7);
+  --mendil-code-stretch: 70%;
+  --mendil-code-weight: 820;
+  --mendil-code-rule: rgb(27 29 31 / 0.2);
+
+  /* Faces */
+  --mendil-display: 'Archivo Variable', 'Archivo', system-ui, sans-serif;
+  --mendil-typed: 'Courier Prime', 'Courier New', monospace;
+}

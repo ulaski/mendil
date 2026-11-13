@@ -49,6 +49,7 @@ export default defineConfig({
         '@fontsource-variable/archivo/wdth.css',
         '@fontsource/courier-prime/400.css',
         '@fontsource/courier-prime/700.css',
+        './src/styles/tokens.css',
         './src/styles/docs.css',
       ],
       components: {
