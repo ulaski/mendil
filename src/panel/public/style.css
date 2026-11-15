@@ -35,8 +35,9 @@
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   color-scheme: light;
 }
+/* Dark follows the OS unless the viewer picked a theme in the bar (data-theme on <html>, set by theme.js). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --ground: #18212b;     /* control room: deep blue-grey */
     --panel: #212d3a;
     --panel-2: #283646;
@@ -54,6 +55,24 @@
     --focus: #e6ebf0;
     color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+  --ground: #18212b;     /* control room: deep blue-grey */
+  --panel: #212d3a;
+  --panel-2: #283646;
+  --ink: #e6ebf0;
+  --ink-2: #aab8c6;
+  --rule: #33424f;
+  --rule-strong: #4b5c6d;
+  --bar: #111a23;
+  --bar-ink: #e6ebf0;
+  --bar-ink-2: #93a3b3;
+  --lamp: #ff4b3e;
+  --lamp-ink: #1a0503;
+  --ok: #4cc283;
+  --warn: #e0a243;
+  --focus: #e6ebf0;
+  color-scheme: dark;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -142,6 +161,7 @@ input[type="range"] { accent-color: var(--ink); }
   border: 1px solid transparent; border-radius: var(--radius); background: transparent; color: var(--bar-ink-2); cursor: pointer;
 }
 .bar-signout:hover { color: var(--bar-ink); border-color: var(--rule-strong); }
+.bar-theme { width: 34px; padding: 0; justify-content: center; }
 .bar :focus-visible { outline-color: var(--bar-ink); }
 
 /* --- on air strip --------------------------------------------------------------------- */
@@ -304,7 +324,7 @@ input[type="range"] { accent-color: var(--ink); }
   .remove { width: 44px; height: 44px; }
   .results .btn.small, #log-toggle { height: 44px; }
   .bar-clock { font-size: 15px; }
-  .bar-signout { width: 40px; height: 40px; padding: 0; justify-content: center; }
+  .bar-signout, .bar-theme { width: 40px; height: 40px; padding: 0; justify-content: center; }
   .bar-signout span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
 @media (max-width: 480px) {

@@ -10,9 +10,11 @@ import { PanelServer } from '../src/panel/server.js';
 
 // The browser script is never run by the other tests, so a syntax error in it (0.6.2 and 0.7.0
 // shipped one) would only show up as a blank panel.
-test('the panel script parses', () => {
-  const src = fs.readFileSync(new URL('../src/panel/public/app.js', import.meta.url), 'utf8');
-  assert.doesNotThrow(() => new vm.Script(src, { filename: 'app.js' }));
+test('the panel scripts parse', () => {
+  for (const name of ['app.js', 'theme.js']) {
+    const src = fs.readFileSync(new URL(`../src/panel/public/${name}`, import.meta.url), 'utf8');
+    assert.doesNotThrow(() => new vm.Script(src, { filename: name }));
+  }
 });
 
 const quietLog = { debug() {}, info() {}, warn() {}, error() {}, child() { return this; } };

@@ -2,6 +2,7 @@
 const STRINGS = {
   en: {
     passwordLabel: 'Panel password', signIn: 'Sign in', signOut: 'Sign out',
+    themeDark: 'Switch to dark theme', themeLight: 'Switch to light theme',
     passwordHint: "The password is in the bot's log on first start, or set it with PANEL_PASSWORD.",
     wrongPassword: "That password didn't work.", tooManyAttempts: 'Too many attempts. Try again in a few minutes.',
     nicknameLabel: 'Your TeamSpeak nickname', sendCode: 'Send me a code',
@@ -51,6 +52,7 @@ const STRINGS = {
   },
   tr: {
     passwordLabel: 'Panel şifresi', signIn: 'Giriş yap', signOut: 'Çıkış yap',
+    themeDark: 'Koyu temaya geç', themeLight: 'Açık temaya geç',
     passwordHint: "Şifre, ilk açılışta botun log'unda yazar; PANEL_PASSWORD ile kendin de belirleyebilirsin.",
     wrongPassword: 'Şifre yanlış.', tooManyAttempts: 'Çok fazla deneme oldu. Birkaç dakika sonra tekrar dene.',
     nicknameLabel: 'TeamSpeak takma adın', sendCode: 'Bana kod gönder',
@@ -120,6 +122,18 @@ function applyStrings() {
   document.documentElement.lang = lang;
   for (const el of document.querySelectorAll('[data-t]')) el.textContent = t(el.dataset.t);
   for (const el of document.querySelectorAll('[data-t-placeholder]')) el.placeholder = t(el.dataset.tPlaceholder);
+  renderTheme();
+}
+
+// --- theme: follows the OS until the viewer picks one; theme.js applies the saved pick before paint.
+const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+const currentTheme = () => document.documentElement.dataset.theme || (darkQuery.matches ? 'dark' : 'light');
+
+function renderTheme() {
+  const dark = currentTheme() === 'dark';
+  $('theme-icon').setAttribute('href', dark ? '#i-sun' : '#i-moon');
+  $('theme-label').textContent = t(dark ? 'themeLight' : 'themeDark');
+  $('theme').title = $('theme-label').textContent;
 }
 
 function duration(seconds) {
@@ -276,6 +290,15 @@ $('login-form').addEventListener('submit', async (e) => {
   $('password').value = '';
   return startApp();
 });
+
+$('theme').addEventListener('click', () => {
+  const next = currentTheme() === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem('mendil-theme', next); } catch { /* private mode: the pick lasts until reload */ }
+  renderTheme();
+});
+darkQuery.addEventListener('change', renderTheme);
+renderTheme();
 
 $('logout').addEventListener('click', async () => {
   await api('POST', '/api/logout');

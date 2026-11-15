@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-11-15
+
+### Added
+- A light/dark switch in the web panel's top bar. The panel still follows the system theme until you pick one, and remembers the pick in that browser.
+
 ### Changed
 - Mendil and Mendil-Native are in Unraid Community Applications: the Unraid guide now installs them from the Apps tab, and adding the template by hand stays as a fallback.
 
@@ -157,7 +162,8 @@ First public version of 🧻 Mendil.
 - A `stats:` log line every 10 minutes, and `/tmp/mendil-health.json` with connection details.
 - English and Turkish chat messages (`BOT_LANGUAGE`). Adding a language means translating one file.
 
-[Unreleased]: https://github.com/ulaski/mendil/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/ulaski/mendil/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/ulaski/mendil/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/ulaski/mendil/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/ulaski/mendil/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/ulaski/mendil/compare/v0.6.1...v0.6.2

@@ -8,6 +8,7 @@
   <link rel="icon" href="/favicon.ico">
   <link rel="apple-touch-icon" href="/icon.png">
   <link rel="stylesheet" href="/style.css">
+  <script src="/theme.js"></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -23,6 +24,8 @@
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M15.5 15.5L20 20"/></symbol>
     <symbol id="i-next" viewBox="0 0 24 24"><path d="M4 7h10M4 12h10M4 17h6M17 14v6M14 17h6"/></symbol>
     <symbol id="i-add" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M19.5 14.5A7.5 7.5 0 0 1 9.5 4.5a7.5 7.5 0 1 0 10 10z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/></symbol>
     <symbol id="i-signout" viewBox="0 0 24 24"><path d="M10 5H5.5v14H10M14 8l4 4-4 4M18 12H9"/></symbol>
   </svg>
 
@@ -66,6 +69,7 @@
       <span class="bar-engine" id="engine"></span>
       <time class="bar-clock" id="clock"></time>
       <span class="bar-user" id="me" hidden></span>
+      <button class="bar-signout bar-theme" id="theme" type="button"><svg class="icon" aria-hidden="true"><use id="theme-icon" href="#i-moon"/></svg><span class="visually-hidden" id="theme-label"></span></button>
       <button class="bar-signout" id="logout" type="button"><svg class="icon"><use href="#i-signout"/></svg><span data-t="signOut">Sign out</span></button>
     </header>
 
