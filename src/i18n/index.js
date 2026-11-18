@@ -1,7 +1,8 @@
 import en from './en.js';
+import ru from './ru.js';
 import tr from './tr.js';
 
-export const LANGUAGES = { en, tr };
+export const LANGUAGES = { en, ru, tr };
 
 function format(template, vars) {
   return template.replace(/\{(\w+)\}/g, (match, key) => (key in vars ? String(vars[key]) : match));
