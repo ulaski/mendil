@@ -5,6 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- German chat messages (`BOT_LANGUAGE=de`).
+
 ## [0.7.2] - 2026-11-15
 
 ### Added
