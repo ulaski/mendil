@@ -12,7 +12,7 @@
 # Pinned; Dependabot (.github/dependabot.yml) proposes updates.
 # Static ffmpeg for the native image (https://github.com/wader/static-ffmpeg). Debian's ffmpeg
 # drags in ~400 MB of shared libraries (LLVM, Mesa, ...); one static binary is ~100 MB.
-FROM mwader/static-ffmpeg:9.0.2-1@sha256:f5d100184884eb3e82b0eb14bb5ebf98da99826ac824989720297fb9ef21c822 AS static-ffmpeg
+FROM mwader/static-ffmpeg:9.1@sha256:dd09509d8c2152bfa601c8c20e3dd166bde906d37951b9f7e8bbd922267f5ac9 AS static-ffmpeg
 
 FROM node:26.13.0-bookworm-slim AS base
 
